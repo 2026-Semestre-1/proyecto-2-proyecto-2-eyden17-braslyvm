@@ -1,0 +1,60 @@
+@startuml
+title Diagrama de Paquetes - Proyecto_1
+
+skinparam packageStyle rectangle
+skinparam shadowing false
+skinparam linetype ortho
+skinparam classAttributeIconSize 0
+
+left to right direction
+
+package "Proyecto_1" {
+
+    package "ui" {
+        class Interfaz
+    }
+
+    package "parser" {
+        class Parcer
+    }
+
+    package "core" {
+        class CPU
+        class Dispatcher
+        class BCP
+    }
+
+    package "memory" {
+        class Memoria
+        class Disco
+    }
+
+    package "app" {
+        class Main
+    }
+}
+
+Main ..> Interfaz
+
+Interfaz ..> Parcer
+Interfaz ..> CPU
+Interfaz ..> Dispatcher
+Interfaz ..> Memoria
+Interfaz ..> Disco
+
+Parcer ..> BCP
+Parcer ..> Memoria
+Parcer ..> Disco
+
+CPU ..> BCP
+CPU ..> Memoria
+CPU ..> Disco
+
+Dispatcher ..> BCP
+Dispatcher ..> Memoria
+Dispatcher ..> Disco
+
+Memoria ..> BCP
+Disco ..> Memoria
+
+@enduml
