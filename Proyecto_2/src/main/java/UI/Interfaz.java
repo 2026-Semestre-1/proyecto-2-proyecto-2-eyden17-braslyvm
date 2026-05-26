@@ -9,7 +9,7 @@ import CPU.CPU;
 import CPU.BCP;
 import Memoria.Memoria;
 import Memoria.Disco;
-import Proyecto_1.Parcer;
+import Parser.Parser;
 
 /**
  *
@@ -20,7 +20,7 @@ public class Interfaz extends javax.swing.JPanel {
     private Disco disco;
     private CPU cpu;
     private Dispatcher dispatcher;
-    private Parcer parcer;
+    private Parser parser;
     private boolean sistemaIniciado = false;
 
     private static final int DEFAULT_MEMORIA = 512;
@@ -1099,7 +1099,7 @@ public class Interfaz extends javax.swing.JPanel {
         disco      = new Disco(sizeVirtual, sizeDisco);
         cpu        = new CPU(memoria, disco);
         dispatcher = new Dispatcher();
-        parcer     = new Parcer();
+        parser     = new Parser();
         sistemaIniciado = true;
 
         terminalInput.setEnabled(false);
@@ -1390,7 +1390,7 @@ public class Interfaz extends javax.swing.JPanel {
         int cargados = 0;
 
         for (java.io.File archivo : archivos) {
-            BCP bcp = parcer.Leer(archivo, memoria, disco);
+            BCP bcp = parser.Leer(archivo, memoria, disco);
             if (bcp != null) {
 
                 // El BCP se guarda en la cola/lista del Dispatcher.
