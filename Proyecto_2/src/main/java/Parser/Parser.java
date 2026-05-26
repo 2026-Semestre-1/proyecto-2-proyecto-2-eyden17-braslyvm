@@ -1,4 +1,4 @@
-package Proyecto_1;
+package Parser;
 
 import CPU.BCP;
 import Memoria.Memoria;
@@ -8,7 +8,7 @@ import java.io.FileReader;
 import java.io.IOException;
 import java.io.File;
 
-public class Parcer {
+public class Parser {
 
     /**
      * Lee el archivo .asm, valida cada línea y carga las instrucciones en memoria.
