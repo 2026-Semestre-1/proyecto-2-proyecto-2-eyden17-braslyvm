@@ -15,8 +15,8 @@ public class Memoria {
     private String[] memoria;
     private int tamaño;
     private static final int inicio_SO = 0;
-    private static final int limite_SO = 99;
-    private static final int tamaño_BCP = 20;
+    private static final int limite_SO = 149;
+    private static final int tamaño_BCP = 30;
     private static final int n_Procesos = 5;
 
     private int punteroSO;
@@ -140,8 +140,8 @@ public class Memoria {
         int ah = Integer.parseInt(memoria[p++]);
 
         int prioridad        = Integer.parseInt(memoria[p++]);
-        long tiempoInicio    = Long.parseLong(memoria[p++]);
-        long tiempoEmpleado  = Long.parseLong(memoria[p++]);
+        int tiempoInicio    = Integer.parseInt(memoria[p++]);
+        int tiempoEmpleado  = Integer.parseInt(memoria[p++]);
         String pilaStr = memoria[p++];
         int[] pila = new int[5];
         int puntero_pila = -1;
@@ -159,7 +159,21 @@ public class Memoria {
                 archivos.add(arch);
             }
         }
-        p++; 
+                // nuevos campos PY2
+        int tiempoLlegada = Integer.parseInt(memoria[p++]);
+        int tiempoFinal = Integer.parseInt(memoria[p++]);
+        int rafagaTotal = Integer.parseInt(memoria[p++]);
+        int rafagaRestante = Integer.parseInt(memoria[p++]);
+        int tiempoEspera = Integer.parseInt(memoria[p++]);
+        int turnaround = Integer.parseInt(memoria[p++]);
+        double trTs = Double.parseDouble(memoria[p++]);
+        int tickets = Integer.parseInt(memoria[p++]);
+        int quantumRestante = Integer.parseInt(memoria[p++]);
+        boolean iniciado = Boolean.parseBoolean(memoria[p++]);
+
+        // saltar campo siguiente BCP
+        p++;
+
         BCP bcp = new BCP(idProceso, nombreProceso, estado, base, limite, pc, prioridad);
         bcp.setIr(ir);
         bcp.setAc(ac);
@@ -173,6 +187,16 @@ public class Memoria {
         bcp.setTiempoEmpleado(tiempoEmpleado);
         bcp.setPilaDirecta(pila, puntero_pila);
         bcp.setArchivosAbiertos(archivos);
+        bcp.setTiempoLlegada(tiempoLlegada);
+        bcp.setTiempoFinal(tiempoFinal);
+        bcp.setRafagaTotal(rafagaTotal);
+        bcp.setRafagaRestante(rafagaRestante);
+        bcp.setTiempoEspera(tiempoEspera);
+        bcp.setTurnaround(turnaround);
+        bcp.setTrTs(trTs);
+        bcp.setTickets(tickets);
+        bcp.setQuantumRestante(quantumRestante);
+        bcp.setIniciado(iniciado);
         return bcp;
     }
     /**
@@ -215,6 +239,18 @@ public class Memoria {
             archStr.append(arch.get(i));
         }
         memoria[p++] = archStr.toString();
+      
+        memoria[p++] = String.valueOf(bcp.getTiempoLlegada());
+        memoria[p++] = String.valueOf(bcp.getTiempoFinal());
+        memoria[p++] = String.valueOf(bcp.getRafagaTotal());
+        memoria[p++] = String.valueOf(bcp.getRafagaRestante());
+        memoria[p++] = String.valueOf(bcp.getTiempoEspera());
+        memoria[p++] = String.valueOf(bcp.getTurnaround());
+        memoria[p++] = String.valueOf(bcp.getTrTs());
+        memoria[p++] = String.valueOf(bcp.getTickets());
+        memoria[p++] = String.valueOf(bcp.getQuantumRestante());
+        memoria[p++] = String.valueOf(bcp.isIniciado());
+
         memoria[p] = bcp.getSiguienteBCP() != null
                 ? bcp.getSiguienteBCP().getIdProceso() : "null";
     }
@@ -338,8 +374,8 @@ public class Memoria {
                 int al = Integer.parseInt(memoria[p++]);
                 int ah = Integer.parseInt(memoria[p++]);
                 int prioridad = Integer.parseInt(memoria[p++]);
-                long tiempoInicio = Long.parseLong(memoria[p++]);
-                long tiempoEmpleado = Long.parseLong(memoria[p++]);
+                int tiempoInicio = Integer.parseInt(memoria[p++]);
+                int tiempoEmpleado = Integer.parseInt(memoria[p++]);
 
                 String pilaStr = memoria[p++];
                 int[] pila = new int[5];

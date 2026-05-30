@@ -30,8 +30,8 @@ public class BCP {
     private int puntero_pila;
     private static final int size_pila = 5;
     private int cpuAsignado;
-    private long tiempoInicio;
-    private long tiempoEmpleado;
+    private int tiempoInicio;
+    private int tiempoEmpleado;
     private java.util.List<String> archivosAbiertos;
     private java.util.List<Integer> contenidosArchivos;
     private String archivoAbierto;
@@ -39,6 +39,22 @@ public class BCP {
     private BCP siguienteBCP;
     private int prioridad;
     private String irTexto;
+    
+    /* implementaciones nuevas    
+    */
+    private int tiempoLlegada;
+    private int tiempoFinal;
+    private int rafagaTotal;
+    private int rafagaRestante;
+    private int tiempoEspera;
+    private int turnaround;
+    private double trTs;
+    private int tickets;
+    private int quantumRestante;
+    private boolean iniciado;
+    
+    
+    
 
     /**
     * Constructor de la clase BCP.
@@ -72,6 +88,16 @@ public class BCP {
         this.archivoAbierto = "";
         this.siguienteBCP = null;
         this.irTexto = "";
+        this.tiempoLlegada = 0;
+        this.tiempoFinal = -1;
+        this.rafagaTotal = 0;
+        this.rafagaRestante = 0;
+        this.tiempoEspera = 0;
+        this.turnaround = 0;
+        this.trTs = 0.0;
+        this.tickets = 1;
+        this.quantumRestante = 0;
+        this.iniciado = false;
 
 
         
@@ -192,16 +218,16 @@ public class BCP {
     public void setCpuAsignado(int cpuAsignado) { 
         this.cpuAsignado = cpuAsignado; 
     }
-    public long getTiempoInicio() { 
+    public int getTiempoInicio() { 
         return tiempoInicio; 
     }
-    public void setTiempoInicio(long tiempoInicio) { 
+    public void setTiempoInicio(int tiempoInicio) { 
         this.tiempoInicio = tiempoInicio; 
     }
-    public long getTiempoEmpleado() { 
+    public int getTiempoEmpleado() { 
         return tiempoEmpleado; 
     }
-    public void setTiempoEmpleado(long tiempoEmpleado) { 
+    public void setTiempoEmpleado(int tiempoEmpleado) { 
         this.tiempoEmpleado = tiempoEmpleado; 
     }
     public BCP getSiguienteBCP() { 
@@ -232,6 +258,86 @@ public class BCP {
     }
     public void setAl(int al) { 
         this.al = al & 0xFF;
+    }
+    public int getTiempoLlegada() {
+    return tiempoLlegada;
+    }
+
+    public void setTiempoLlegada(int tiempoLlegada) {
+        this.tiempoLlegada = tiempoLlegada;
+    }
+
+    public int getTiempoFinal() {
+        return tiempoFinal;
+    }
+
+    public void setTiempoFinal(int tiempoFinal) {
+        this.tiempoFinal = tiempoFinal;
+    }
+
+    public int getRafagaTotal() {
+        return rafagaTotal;
+    }
+
+    public void setRafagaTotal(int rafagaTotal) {
+        this.rafagaTotal = rafagaTotal;
+        this.rafagaRestante = rafagaTotal;
+    }
+
+    public int getRafagaRestante() {
+        return rafagaRestante;
+    }
+
+    public void setRafagaRestante(int rafagaRestante) {
+        this.rafagaRestante = rafagaRestante;
+    }
+
+    public int getTiempoEspera() {
+        return tiempoEspera;
+    }
+
+    public void setTiempoEspera(int tiempoEspera) {
+        this.tiempoEspera = tiempoEspera;
+    }
+
+    public int getTurnaround() {
+        return turnaround;
+    }
+
+    public void setTurnaround(int turnaround) {
+        this.turnaround = turnaround;
+    }
+
+    public double getTrTs() {
+        return trTs;
+    }
+
+    public void setTrTs(double trTs) {
+        this.trTs = trTs;
+    }
+
+    public int getTickets() {
+        return tickets;
+    }
+
+    public void setTickets(int tickets) {
+        this.tickets = tickets;
+    }
+
+    public int getQuantumRestante() {
+        return quantumRestante;
+    }
+
+    public void setQuantumRestante(int quantumRestante) {
+        this.quantumRestante = quantumRestante;
+    }
+
+    public boolean isIniciado() {
+        return iniciado;
+    }
+
+    public void setIniciado(boolean iniciado) {
+        this.iniciado = iniciado;
     }
 
 
@@ -398,6 +504,55 @@ public class BCP {
         if (nombreArchivo.equals(archivoAbierto)) {
             archivoAbierto = "";
         }
+    }
+    public boolean haLlegado(int tiempoActual) {
+        return tiempoActual >= tiempoLlegada;
+    }
+
+    public boolean estaFinalizado() {
+        return rafagaRestante <= 0 || "finalizado".equalsIgnoreCase(estado);
+    }
+
+    public void ejecutarUnSegundo() {
+        if (rafagaRestante > 0) {
+            tiempoEmpleado++;
+            rafagaRestante--;
+        }
+    }
+
+    public void marcarInicio(int tiempoActual) {
+        if (!iniciado) {
+            tiempoInicio = tiempoActual;
+            iniciado = true;
+        }
+    }
+
+    public void marcarFinalizado(int tiempoActual) {
+        estado = "finalizado";
+        tiempoFinal = tiempoActual;
+        turnaround = tiempoFinal - tiempoLlegada;
+
+        if (rafagaTotal > 0) {
+            trTs = (double) turnaround / rafagaTotal;
+        } else {
+            trTs = 0.0;
+        }
+
+        cpuAsignado = -1;
+    }
+
+    public double calcularHRRN(int tiempoActual) {
+        int espera = tiempoActual - tiempoLlegada - tiempoEmpleado;
+
+        if (espera < 0) {
+            espera = 0;
+        }
+
+        if (rafagaRestante <= 0) {
+            return 0;
+        }
+
+        return (double) (espera + rafagaRestante) / rafagaRestante;
     }
 
 }

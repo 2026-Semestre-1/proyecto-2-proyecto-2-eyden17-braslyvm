@@ -71,6 +71,7 @@ public class CPU {
         if (!Salto) {
             bcp.setPc(pc + 1);
         }
+        
         bcp.setTiempoEmpleado(bcp.getTiempoEmpleado() + 1);
 
         return true;

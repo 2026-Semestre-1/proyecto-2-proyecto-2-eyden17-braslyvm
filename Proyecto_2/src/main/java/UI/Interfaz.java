@@ -27,11 +27,11 @@ public class Interfaz extends javax.swing.JPanel {
     private static final int DEFAULT_VIRTUAL = 64;
     private static final int DEFAULT_DISCO   = 512;
     
-    private static final int TAMANO_BCP = 20;
+    private static final int TAMANO_BCP = 30;
     private static final java.awt.Color COLOR_EJECUCION = new java.awt.Color(255, 249, 196);
     private static final java.awt.Color COLOR_INSTRUCCION = new java.awt.Color(255, 236, 179);
     private static final int TIEMPO_ESPERA_MS = 750;
-    private long tiempoGlobal = 0;
+    private int tiempoGlobal = 0;
 
     /**
      * Inicializa la interfaz
