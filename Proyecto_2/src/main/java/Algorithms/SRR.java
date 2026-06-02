@@ -81,7 +81,9 @@ public class SRR {
                 currentProcess.setTiempoFinal(currentTime);
                 currentProcess.setTurnaround(currentProcess.getTiempoFinal() - currentProcess.getTiempoLlegada());
                 currentProcess.setTiempoEspera(currentProcess.getTurnaround() - currentProcess.getRafagaTotal());
-                currentProcess.setTrTs((double) currentProcess.getTurnaround() / currentProcess.getRafagaTotal());
+                currentProcess.setTrTs(currentProcess.getRafagaTotal() > 0
+                        ? (double) currentProcess.getTurnaround() / currentProcess.getRafagaTotal()
+                        : 0.0);
                 currentProcess.setEstado("finalizado");
             } else {
                 currentProcess.setEstado("listo");
@@ -93,11 +95,11 @@ public class SRR {
     }
 
     private void addArrivedProcesses(List<BCP> pendingProcesses, Queue<BCP> newQueue, int currentTime) {
-        for (int i = 0; i < pendingProcesses.size(); i++) {
+        for (int i = 0; i < pendingProcesses.size(); ) {
             if (pendingProcesses.get(i).getTiempoLlegada() <= currentTime) {
                 newQueue.offer(pendingProcesses.remove(i));
             } else {
-                break;
+                i++;
             }
         }
     }

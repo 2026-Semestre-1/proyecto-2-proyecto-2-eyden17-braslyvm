@@ -67,7 +67,9 @@ public class RR {
                 currentProcess.setTiempoFinal(currentTime);
                 currentProcess.setTurnaround(currentProcess.getTiempoFinal() - currentProcess.getTiempoLlegada());
                 currentProcess.setTiempoEspera(currentProcess.getTurnaround() - currentProcess.getRafagaTotal());
-                currentProcess.setTrTs((double) currentProcess.getTurnaround() / currentProcess.getRafagaTotal());
+                currentProcess.setTrTs(currentProcess.getRafagaTotal() > 0
+                        ? (double) currentProcess.getTurnaround() / currentProcess.getRafagaTotal()
+                        : 0.0);
                 currentProcess.setEstado("finalizado");
             } else {
                 currentProcess.setEstado("listo");
