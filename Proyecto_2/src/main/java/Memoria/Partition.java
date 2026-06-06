@@ -44,22 +44,46 @@ public class Partition {
      * @param sizes_partition 
      */
     public Partition(int start_user, int size_memori, int[] sizes_partition) {
-        start = new int[sizes_partition.length];
-        size = new int[sizes_partition.length];
-        free_partition = new boolean[sizes_partition.length];
-        procesoParticiones = new String[sizes_partition.length];
 
         int current_start = start_user;
+        int pattern_index = 0;
+        int count_partition = 0;
 
-        for (int i = 0; i < sizes_partition.length; i++) {
-            int partition_size = sizes_partition[i];
+        // Primero se calcula cuántas particiones se van a crear
+        while (current_start < size_memori) {
+            int partition_size = sizes_partition[pattern_index];
 
             if (partition_size <= 0) {
                 throw new IllegalArgumentException("El tamaño de la partición debe ser mayor que 0.");
             }
 
             if (current_start + partition_size > size_memori) {
-                throw new IllegalArgumentException("Las particiones superan el tamaño disponible de memoria.");
+                partition_size = size_memori - current_start;
+            }
+
+            count_partition++;
+            current_start += partition_size;
+
+            pattern_index = (pattern_index + 1) % sizes_partition.length;
+        }
+
+        start = new int[count_partition];
+        size = new int[count_partition];
+        free_partition = new boolean[count_partition];
+        procesoParticiones = new String[count_partition];
+
+        current_start = start_user;
+        pattern_index = 0;
+
+        for (int i = 0; i < count_partition; i++) {
+            int partition_size = sizes_partition[pattern_index];
+
+            if (partition_size <= 0) {
+                throw new IllegalArgumentException("El tamaño de la partición debe ser mayor que 0.");
+            }
+
+            if (current_start + partition_size > size_memori) {
+                partition_size = size_memori - current_start;
             }
 
             start[i] = current_start;
@@ -68,6 +92,7 @@ public class Partition {
             procesoParticiones[i] = "";
 
             current_start += partition_size;
+            pattern_index = (pattern_index + 1) % sizes_partition.length;
         }
     }
     /**
