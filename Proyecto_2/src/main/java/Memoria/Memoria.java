@@ -7,7 +7,9 @@ package Memoria;
 import CPU.BCP;
 import Memoria.Partition;
 import Memoria.BestFit;
-//import Memoria.Pagination;
+import Memoria.Pagination;
+
+
 
 /**
  *
@@ -30,12 +32,14 @@ public class Memoria {
     private Partition partitio_Strategy;
     private BestFit BestFit_Strategy;
     
-    //private Pagination Pagination_Strategy;
+    private Pagination Pagination_Strategy;
+    private Disco disco;
+    
 
     /**
     * Inicializa la memoria del sistema y del usuario
     */
-    public Memoria (int tamaño, String Strategy){
+    public Memoria (int tamaño, String Strategy,Disco disco ){
         this.tamaño = tamaño;
         this.memoria = new String[tamaño];
         this.punteroSO = 0;
@@ -43,8 +47,9 @@ public class Memoria {
         this.punteroUsuario = inicioUsuario;
         this.Strategy = Strategy;
         this.partitio_Strategy = null;
-        //this.Pagination_Strategy = null;
+        this.Pagination_Strategy = null;
         this.BestFit_Strategy = null;
+        this.disco = disco;
     }
 
     /**
@@ -515,11 +520,18 @@ public class Memoria {
             case "Best_Fit":
                 this.BestFit_Strategy = new BestFit(inicioUsuario, tamaño);
                 this.partitio_Strategy = null;
+                this.Pagination_Strategy = null;
                 break;
 
             case "Pagination":
-                // Pendiente:
-                // this.Pagination_Strategy = new Pagination(inicioUsuario, tamaño, countPartitions);
+                
+                this.Pagination_Strategy = new Pagination(
+                    inicioUsuario,
+                    tamaño,
+                    countPartitions,
+                    disco,
+                    n_Procesos
+            );
                 this.BestFit_Strategy = null;
                 this.partitio_Strategy = null;
                 System.out.println("Pagination todavía no está implementado.");
@@ -532,6 +544,7 @@ public class Memoria {
                 }
                 this.partitio_Strategy = new Partition(inicioUsuario, tamaño, countPartitions);
                 this.BestFit_Strategy = null;
+                this.Pagination_Strategy = null;
                 break;
 
             case "Partition_Different":
@@ -541,6 +554,7 @@ public class Memoria {
                 }
                 this.partitio_Strategy = new Partition(inicioUsuario, tamaño, partitionSizes);
                 this.BestFit_Strategy = null;
+                this.Pagination_Strategy = null;
                 break;
 
             default:
@@ -548,6 +562,7 @@ public class Memoria {
                 this.Strategy = "Default";
                 this.partitio_Strategy = null;
                 this.BestFit_Strategy = null;
+                this.Pagination_Strategy = null;
                 break;
         }
     }
@@ -586,8 +601,7 @@ public class Memoria {
                 return partitio_Strategy.asignar(bcp, instrucciones, memoria);
 
             case "Pagination":
-                System.out.println("Paginación todavía no implementada.");
-                return null;
+                return Pagination_Strategy.assign(bcp, instrucciones, memoria);
 
             case "Default":
             default:
@@ -635,7 +649,9 @@ public class Memoria {
                 break;
 
             case "Pagination":
-                System.out.println("Liberación por paginación todavía no implementada.");
+                if (Pagination_Strategy != null) {
+                    Pagination_Strategy.release(bcp, memoria);
+                }
                 break;
 
             case "Default":
@@ -668,8 +684,7 @@ public class Memoria {
                 return partitio_Strategy != null && partitio_Strategy.hayEspacio(instrucciones);
 
             case "Pagination":
-                System.out.println("Validación de espacio por paginación todavía no implementada.");
-                return false;
+                return Pagination_Strategy != null && Pagination_Strategy.hasSpace(instrucciones);
 
             case "Default":
             default:
@@ -693,9 +708,9 @@ public class Memoria {
 
         switch (Strategy) {
             case "Pagination":
-                // Pendiente:
-                // return Pagination_Strategy.readInstruction(bcp, memoria);
-                System.out.println("Lectura por paginación todavía no implementada.");
+                if (Pagination_Strategy != null) {
+                    return Pagination_Strategy.readInstruction(bcp, memoria);
+                }
                 return null;
 
             default:
@@ -757,5 +772,12 @@ public class Memoria {
 
     public BestFit getBestFit_Strategy() {
         return BestFit_Strategy;
+    }
+    public Pagination getPagination_Strategy() {
+        return Pagination_Strategy;
+    }
+
+    public Disco getDisco() {
+        return disco;
     }
 }
