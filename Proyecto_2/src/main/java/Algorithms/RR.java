@@ -57,6 +57,7 @@ public class RR {
 
             while (executionTime > 0) {
                 currentProcess.setRafagaRestante(currentProcess.getRafagaRestante() - 1);
+                currentProcess.setTiempoEmpleado(currentProcess.getTiempoEmpleado() + 1);
                 currentTime++;
                 executionTime--;
 

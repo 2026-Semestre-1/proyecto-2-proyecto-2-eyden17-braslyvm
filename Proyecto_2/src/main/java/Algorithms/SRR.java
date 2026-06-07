@@ -70,6 +70,7 @@ public class SRR {
 
             for (int i = 0; i < executionTime; i++) {
                 currentProcess.setRafagaRestante(currentProcess.getRafagaRestante() - 1);
+                currentProcess.setTiempoEmpleado(currentProcess.getTiempoEmpleado() + 1);
                 currentTime++;
 
                 addArrivedProcesses(pendingProcesses, newQueue, currentTime);

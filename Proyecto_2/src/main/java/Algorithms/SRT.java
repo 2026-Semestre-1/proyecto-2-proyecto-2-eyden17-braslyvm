@@ -41,6 +41,7 @@ public class SRT {
             }
 
             currentProcess.setRafagaRestante(currentProcess.getRafagaRestante() - 1);
+            currentProcess.setTiempoEmpleado(currentProcess.getTiempoEmpleado() + 1);
             currentTime++;
 
 

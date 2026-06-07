@@ -68,7 +68,7 @@ public class Parser {
                 int baseFinal = resultado[0];
                 int limiteFinal = resultado[1];
 
-                return new BCP(
+                BCP bcp = new BCP(
                         archivo.getName(),
                         archivo.getName(),
                         "preparado",
@@ -77,6 +77,10 @@ public class Parser {
                         baseFinal,
                         0
                 );
+
+                bcp.setTiempoLlegada(0);
+                bcp.setRafagaTotal(cantidadInstrucciones);
+                return bcp;
             }
 
             int baseVirtual = disco.cargarProcesoEnVirtual(archivo.getName(), arreglo);
@@ -84,7 +88,7 @@ public class Parser {
                 return null;
             }
 
-            return new BCP(
+            BCP bcp = new BCP(
                     archivo.getName(),
                     archivo.getName(),
                     "nuevo",
@@ -93,6 +97,10 @@ public class Parser {
                     -1,
                     0
             );
+
+            bcp.setTiempoLlegada(0);
+            bcp.setRafagaTotal(cantidadInstrucciones);
+            return bcp;
 
         } catch (IOException e) {
             javax.swing.JOptionPane.showMessageDialog(
