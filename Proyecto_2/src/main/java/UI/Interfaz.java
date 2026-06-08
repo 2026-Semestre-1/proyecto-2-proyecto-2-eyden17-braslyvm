@@ -10,6 +10,13 @@ import CPU.BCP;
 import Memoria.Memoria;
 import Memoria.Disco;
 import Parser.Parser;
+import Algorithms.FCFS;
+import Algorithms.SJF;
+import Algorithms.SRT;
+import Algorithms.RR;
+import Algorithms.SRR;
+import Algorithms.HRRN;
+import Algorithms.Lottery;
 
 /**
  *
@@ -61,6 +68,20 @@ public class Interfaz extends javax.swing.JPanel {
     private static final int TIEMPO_ESPERA_MS = 750;
     private int tiempoGlobal = 0;
 
+    // Componentes para seleccionar el algoritmo de planificación.
+    private javax.swing.JLabel lblAlgoritmo;
+    private javax.swing.JComboBox<String> cmbAlgoritmo;
+    private javax.swing.JLabel lblQuantum;
+    private javax.swing.JSpinner spnQuantum;
+
+    // Copia base de los procesos cargados.
+    // Esta lista NO se modifica durante las ejecuciones de algoritmos.
+    private java.util.List<BCP> procesosBasePlanificacion = new java.util.ArrayList<>();
+
+    // Historial acumulativo de resultados por algoritmo.
+    private java.util.List<ResultadoEstadistica> historialEstadisticas = new java.util.ArrayList<>();
+    private int contadorEjecucionesEstadisticas = 0;
+
     /**
      * Inicializa la interfaz
      */
@@ -77,6 +98,7 @@ public class Interfaz extends javax.swing.JPanel {
 
         aplicarEstiloVisual();
         aplicarRenderersDeEjecucion();
+        actualizarVisibilidadQuantum();
     }
     /**
      * Aplica los coloresde los procesos que estan en ejecución a las tablas de la interfaz.
@@ -767,6 +789,10 @@ public class Interfaz extends javax.swing.JPanel {
         btnLimpiar = new javax.swing.JButton();
         btnEstadisticas = new javax.swing.JButton();
         btnCargarConfig = new javax.swing.JButton();
+        lblAlgoritmo = new javax.swing.JLabel();
+        cmbAlgoritmo = new javax.swing.JComboBox<>();
+        lblQuantum = new javax.swing.JLabel();
+        spnQuantum = new javax.swing.JSpinner();
         jPanel1 = new javax.swing.JPanel();
         jLabel1 = new javax.swing.JLabel();
         lblBcpId = new javax.swing.JLabel();
@@ -841,6 +867,20 @@ public class Interfaz extends javax.swing.JPanel {
 
         btnCargarConfig.setText("⚙  Configuración");
         btnCargarConfig.addActionListener(this::btnCargarConfigActionPerformed);
+
+        lblAlgoritmo.setText("Algoritmo:");
+        lblAlgoritmo.setFont(new java.awt.Font("Segoe UI", java.awt.Font.BOLD, 13));
+
+        cmbAlgoritmo.setModel(new javax.swing.DefaultComboBoxModel<>(
+                new String[]{"FCFS", "SJF", "SRT", "RR", "SRR", "HRRN", "Lottery"}
+        ));
+        cmbAlgoritmo.setSelectedItem("FCFS");
+        cmbAlgoritmo.addActionListener(e -> actualizarVisibilidadQuantum());
+
+        lblQuantum.setText("Quantum:");
+        lblQuantum.setFont(new java.awt.Font("Segoe UI", java.awt.Font.BOLD, 13));
+
+        spnQuantum.setModel(new javax.swing.SpinnerNumberModel(2, 1, 100, 1));
 
         jPanel1.setBackground(new java.awt.Color(255, 255, 255));
         jPanel1.setBorder(javax.swing.BorderFactory.createTitledBorder("BCP ACTUAL"));
@@ -1298,7 +1338,15 @@ public class Interfaz extends javax.swing.JPanel {
                         .addGap(18, 18, 18)
                         .addComponent(btnEstadisticas)
                         .addGap(18, 18, 18)
-                        .addComponent(btnCargarConfig))
+                        .addComponent(btnCargarConfig)
+                        .addGap(18, 18, 18)
+                        .addComponent(lblAlgoritmo)
+                        .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.RELATED)
+                        .addComponent(cmbAlgoritmo, javax.swing.GroupLayout.PREFERRED_SIZE, 105, javax.swing.GroupLayout.PREFERRED_SIZE)
+                        .addGap(12, 12, 12)
+                        .addComponent(lblQuantum)
+                        .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.RELATED)
+                        .addComponent(spnQuantum, javax.swing.GroupLayout.PREFERRED_SIZE, 60, javax.swing.GroupLayout.PREFERRED_SIZE))
                     .addGroup(layout.createSequentialGroup()
                         .addGroup(layout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING, false)
                             .addComponent(jPanel1, javax.swing.GroupLayout.DEFAULT_SIZE, javax.swing.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE)
@@ -1328,7 +1376,11 @@ public class Interfaz extends javax.swing.JPanel {
                     .addComponent(btnPasoPaso)
                     .addComponent(btnLimpiar)
                     .addComponent(btnEstadisticas)
-                    .addComponent(btnCargarConfig))
+                    .addComponent(btnCargarConfig)
+                    .addComponent(lblAlgoritmo)
+                    .addComponent(cmbAlgoritmo, javax.swing.GroupLayout.PREFERRED_SIZE, javax.swing.GroupLayout.DEFAULT_SIZE, javax.swing.GroupLayout.PREFERRED_SIZE)
+                    .addComponent(lblQuantum)
+                    .addComponent(spnQuantum, javax.swing.GroupLayout.PREFERRED_SIZE, javax.swing.GroupLayout.DEFAULT_SIZE, javax.swing.GroupLayout.PREFERRED_SIZE))
                 .addGap(35, 35, 35)
                 .addGroup(layout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING, false)
                     .addGroup(layout.createSequentialGroup()
@@ -1438,6 +1490,9 @@ public class Interfaz extends javax.swing.JPanel {
         btnEnviar.setEnabled(false);
 
         tiempoGlobal = 0;
+        procesosBasePlanificacion.clear();
+        historialEstadisticas.clear();
+        contadorEjecucionesEstadisticas = 0;
 
         limpiarTabla(tablaMemoria);
         limpiarTabla(tablaMemoriaVirtual);
@@ -1557,9 +1612,242 @@ public class Interfaz extends javax.swing.JPanel {
         }
     }
      
+
+    private void actualizarVisibilidadQuantum() {
+        if (cmbAlgoritmo == null || lblQuantum == null || spnQuantum == null) {
+            return;
+        }
+
+        String algoritmo = String.valueOf(cmbAlgoritmo.getSelectedItem());
+        boolean requiereQuantum = algoritmoUsaQuantum(algoritmo);
+
+        lblQuantum.setVisible(requiereQuantum);
+        spnQuantum.setVisible(requiereQuantum);
+
+        revalidate();
+        repaint();
+    }
+
+    private boolean algoritmoUsaQuantum(String algoritmo) {
+        return "RR".equals(algoritmo)
+                || "SRR".equals(algoritmo)
+                || "Lottery".equals(algoritmo);
+    }
+
+    private int obtenerQuantumSeleccionado() {
+        try {
+            return ((Number) spnQuantum.getValue()).intValue();
+        } catch (Exception e) {
+            return 2;
+        }
+    }
+
+    private void registrarProcesoBaseParaPlanificacion(BCP bcp) {
+        if (bcp == null) {
+            return;
+        }
+
+        // Si ya estaba registrado, se reemplaza para evitar duplicados.
+        for (int i = 0; i < procesosBasePlanificacion.size(); i++) {
+            if (procesosBasePlanificacion.get(i).getIdProceso().equals(bcp.getIdProceso())) {
+                procesosBasePlanificacion.set(i, clonarBCPBase(bcp));
+                return;
+            }
+        }
+
+        procesosBasePlanificacion.add(clonarBCPBase(bcp));
+    }
+
+    private BCP clonarBCPBase(BCP original) {
+        BCP copia = new BCP(
+                original.getIdProceso(),
+                original.getNombreProceso(),
+                "nuevo",
+                original.getBase(),
+                original.getLimite(),
+                original.getBase(),
+                original.getPrioridad()
+        );
+
+        int rafaga = original.getRafagaTotal();
+
+        if (rafaga <= 0 && original.getLimite() >= original.getBase()) {
+            rafaga = original.getLimite() - original.getBase() + 1;
+        }
+
+        if (rafaga <= 0) {
+            rafaga = Math.max(1, original.getTiempoEmpleado());
+        }
+
+        copia.setTiempoLlegada(original.getTiempoLlegada());
+        copia.setRafagaTotal(rafaga);
+        copia.setRafagaRestante(rafaga);
+        copia.setTiempoInicio(0);
+        copia.setTiempoFinal(-1);
+        copia.setTiempoEmpleado(0);
+        copia.setTiempoEspera(0);
+        copia.setTurnaround(0);
+        copia.setTrTs(0.0);
+        copia.setTickets(Math.max(1, original.getTickets()));
+        copia.setQuantumRestante(0);
+        copia.setIniciado(false);
+        copia.setCpuAsignado(-1);
+        copia.setIr("");
+        copia.setArchivosAbiertos(new java.util.ArrayList<>(original.getArchivosAbiertos()));
+
+        return copia;
+    }
+
+    private java.util.List<BCP> crearCopiasParaPlanificacion() {
+        java.util.List<BCP> copias = new java.util.ArrayList<>();
+
+        for (BCP base : procesosBasePlanificacion) {
+            copias.add(clonarBCPBase(base));
+        }
+
+        return copias;
+    }
+
+    private void ejecutarPlanificacionSeleccionada() {
+        String algoritmo = String.valueOf(cmbAlgoritmo.getSelectedItem());
+        int quantum = obtenerQuantumSeleccionado();
+
+        java.util.List<BCP> procesosParaEjecutar = crearCopiasParaPlanificacion();
+        java.util.List<BCP> resultado = ejecutarAlgoritmo(algoritmo, quantum, procesosParaEjecutar);
+
+        contadorEjecucionesEstadisticas++;
+
+        for (BCP bcp : resultado) {
+            historialEstadisticas.add(new ResultadoEstadistica(
+                    contadorEjecucionesEstadisticas,
+                    algoritmoUsaQuantum(algoritmo) ? algoritmo + " Q=" + quantum : algoritmo,
+                    bcp.getIdProceso(),
+                    bcp.getTiempoLlegada(),
+                    bcp.getRafagaTotal(),
+                    bcp.getTiempoInicio(),
+                    bcp.getTiempoFinal(),
+                    bcp.getTurnaround(),
+                    bcp.getTrTs()
+            ));
+        }
+
+        imprimirEstadisticasAcumuladas();
+    }
+
+    private java.util.List<BCP> ejecutarAlgoritmo(String algoritmo, int quantum, java.util.List<BCP> procesos) {
+        switch (algoritmo) {
+            case "FCFS":
+                return new FCFS().schedule(procesos);
+
+            case "SJF":
+                return new SJF().schedule(procesos);
+
+            case "SRT":
+                return new SRT().schedule(procesos);
+
+            case "RR":
+                return new RR(quantum).schedule(procesos);
+
+            case "SRR":
+                // Valores simples para la promoción entre colas.
+                // Si luego desea configurarlos desde JSON, se pueden parametrizar.
+                return new SRR(quantum, 1, 3).schedule(procesos);
+
+            case "HRRN":
+                return new HRRN().schedule(procesos);
+
+            case "Lottery":
+                return new Lottery(quantum).schedule(procesos);
+
+            default:
+                return new FCFS().schedule(procesos);
+        }
+    }
+
+    private void imprimirEstadisticasAcumuladas() {
+        StringBuilder sb = new StringBuilder();
+        sb.append("\n===== ESTADÍSTICAS ACUMULADAS =====\n");
+        sb.append(String.format(
+                "%-5s %-14s %-22s %-8s %-8s %-8s %-8s %-12s %-8s\n",
+                "Ejec", "Algoritmo", "Proceso", "Lleg", "Ráfaga", "Inicio", "Final", "Turnaround", "Tr/Ts"
+        ));
+        sb.append("------------------------------------------------------------------------------------------------\n");
+
+        for (ResultadoEstadistica r : historialEstadisticas) {
+            sb.append(String.format(
+                    "%-5d %-14s %-22s %-8d %-8d %-8d %-8d %-12d %-8.2f\n",
+                    r.numeroEjecucion,
+                    r.algoritmo,
+                    abreviar(r.proceso, 22),
+                    r.tiempoLlegada,
+                    r.rafaga,
+                    r.tiempoInicio,
+                    r.tiempoFinal,
+                    r.turnaround,
+                    r.trTs
+            ));
+        }
+
+        sb.append("====================================\n");
+
+        imprimirTerminal(sb.toString());
+    }
+
+    private String abreviar(String texto, int max) {
+        if (texto == null) {
+            return "";
+        }
+
+        if (texto.length() <= max) {
+            return texto;
+        }
+
+        return texto.substring(0, Math.max(0, max - 3)) + "...";
+    }
+
+    private static class ResultadoEstadistica {
+        int numeroEjecucion;
+        String algoritmo;
+        String proceso;
+        int tiempoLlegada;
+        int rafaga;
+        int tiempoInicio;
+        int tiempoFinal;
+        int turnaround;
+        double trTs;
+
+        ResultadoEstadistica(
+                int numeroEjecucion,
+                String algoritmo,
+                String proceso,
+                int tiempoLlegada,
+                int rafaga,
+                int tiempoInicio,
+                int tiempoFinal,
+                int turnaround,
+                double trTs
+        ) {
+            this.numeroEjecucion = numeroEjecucion;
+            this.algoritmo = algoritmo;
+            this.proceso = proceso;
+            this.tiempoLlegada = tiempoLlegada;
+            this.rafaga = rafaga;
+            this.tiempoInicio = tiempoInicio;
+            this.tiempoFinal = tiempoFinal;
+            this.turnaround = turnaround;
+            this.trTs = trTs;
+        }
+    }
+
     private void btnEjecutarActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_btnEjecutarActionPerformed
         if (!validarSistema()) 
             return;
+
+        // Cada ejecución guarda estadísticas acumulativas del algoritmo seleccionado.
+        if (!procesosBasePlanificacion.isEmpty()) {
+            ejecutarPlanificacionSeleccionada();
+        }
+
         if (memoria.vacio()) {  
             return; 
         }
@@ -1803,19 +2091,13 @@ public class Interfaz extends javax.swing.JPanel {
     }
     private void btnEstadisticasActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_btnEstadisticasActionPerformed
         if (!validarSistema()) return;
-        java.util.List<BCP> bcps = dispatcher.obtenerColaProcesos();
-        if (bcps.isEmpty()) { imprimirTerminal("No hay estadísticas aún."); return; }
 
-        StringBuilder sb = new StringBuilder("\n===== ESTADÍSTICAS =====\n");
-        sb.append(String.format("%-20s %-12s %-12s %-12s\n", "Proceso", "T.Inicio", "T.Empleado", "Estado"));
-        sb.append("------------------------------------------------\n");
-        for (BCP bcp : bcps) {
-            sb.append(String.format("%-20s %-12d %-12d %-12s\n",
-                    bcp.getIdProceso(), bcp.getTiempoInicio(),
-                    bcp.getTiempoEmpleado(), bcp.getEstado()));
+        if (procesosBasePlanificacion.isEmpty()) {
+            imprimirTerminal("No hay procesos base para planificar. Cargue archivos primero.");
+            return;
         }
-        sb.append("========================\n");
-        imprimirTerminal(sb.toString());
+
+        ejecutarPlanificacionSeleccionada();
     }//GEN-LAST:event_btnEstadisticasActionPerformed
 
     private void btnCargarArchivosActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_btnCargarArchivosActionPerformed
@@ -1837,6 +2119,9 @@ public class Interfaz extends javax.swing.JPanel {
 
                 // El BCP se guarda en la cola/lista del Dispatcher.
                 dispatcher.registrarProceso(bcp);
+
+                // Se guarda una copia base para poder comparar algoritmos sin volver a cargar archivos.
+                registrarProcesoBaseParaPlanificacion(bcp);
 
                 // Solo se agrega el BCP a memoria si sus instrucciones entraron completas.
                 if (bcp.getEstado().equals("preparado")) {
