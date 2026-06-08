@@ -30,10 +30,18 @@ public class Interfaz extends javax.swing.JPanel {
     private int cpuSeleccionado = 0;
     
     // Índice rotatorio para selección Round-Robin / SRR en la interfaz
-    private int lastIndexSeleccionado = -1;
     private Dispatcher dispatcher;
     private Parser parser;
     private boolean sistemaIniciado = false;
+    private String algoritmoEjecucionActual = "";
+    private int quantumEjecucionActual = -1;
+    private FCFS fcfsRuntime = new FCFS();
+    private SJF sjfRuntime = new SJF();
+    private SRT srtRuntime = new SRT();
+    private RR rrRuntime = null;
+    private SRR srrRuntime = null;
+    private HRRN hrrnRuntime = new HRRN();
+    private Lottery lotteryRuntime = null;
 
     private static final int DEFAULT_MEMORIA = 512;
     private static final int DEFAULT_VIRTUAL = 64;
@@ -57,6 +65,8 @@ public class Interfaz extends javax.swing.JPanel {
     private static final int TAMANO_BCP = 30;
     private static final java.awt.Color COLOR_EJECUCION = new java.awt.Color(255, 249, 196);
     private static final java.awt.Color COLOR_INSTRUCCION = new java.awt.Color(255, 236, 179);
+    private static final java.awt.Color COLOR_TEXTO_BASE = new java.awt.Color(44, 57, 75);
+    private static final java.awt.Color COLOR_TOAST = new java.awt.Color(21, 101, 192);
     private static final String[] CAMPOS_BCP_KERNEL = {
         "idProceso",
         "nombreProceso",
@@ -103,9 +113,27 @@ public class Interfaz extends javax.swing.JPanel {
         new java.awt.Color(209, 196, 233)
     };
 
+    private static final java.awt.Color[] COLORES_BCP = {
+        new java.awt.Color(21, 101, 192),
+        new java.awt.Color(46, 125, 50),
+        new java.awt.Color(173, 20, 87),
+        new java.awt.Color(106, 27, 154),
+        new java.awt.Color(0, 121, 107),
+        new java.awt.Color(198, 40, 40),
+        new java.awt.Color(239, 108, 0),
+        new java.awt.Color(69, 90, 100),
+        new java.awt.Color(40, 53, 147),
+        new java.awt.Color(85, 139, 47),
+        new java.awt.Color(0, 96, 100),
+        new java.awt.Color(93, 64, 55)
+    };
+
     private static final java.awt.Color COLOR_HUECO_LIBRE = new java.awt.Color(224, 224, 224);
     private static final int TIEMPO_ESPERA_MS = 750;
     private int tiempoGlobal = 0;
+    private final java.util.Map<String, java.awt.Color> coloresPorBCP = new java.util.LinkedHashMap<>();
+    private javax.swing.Popup toastPopup;
+    private javax.swing.Timer toastTimer;
 
     // Componentes para seleccionar el algoritmo de planificación.
     private javax.swing.JLabel lblAlgoritmo;
@@ -129,6 +157,11 @@ public class Interfaz extends javax.swing.JPanel {
      */
     public Interfaz() {
         initComponents();
+
+        if (java.beans.Beans.isDesignTime()) {
+            return;
+        }
+
         configurarPanelSelectorCpu();
 
         terminalInput.setEnabled(false);
@@ -296,6 +329,86 @@ public class Interfaz extends javax.swing.JPanel {
         tb.setTitleColor(new java.awt.Color(50, 66, 85));
         return tb;
     }
+
+    private java.awt.Color obtenerColorBCP(String idProceso) {
+        if (idProceso == null || idProceso.isBlank()) {
+            return COLOR_TEXTO_BASE;
+        }
+
+        java.awt.Color color = coloresPorBCP.get(idProceso);
+
+        if (color == null) {
+            color = COLORES_BCP[coloresPorBCP.size() % COLORES_BCP.length];
+            coloresPorBCP.put(idProceso, color);
+        }
+
+        return color;
+    }
+
+    private void mostrarToast(String mensaje) {
+        mostrarToast(mensaje, COLOR_TOAST);
+    }
+
+    private void mostrarToast(String mensaje, java.awt.Color acento) {
+        if (mensaje == null || mensaje.isBlank()) {
+            return;
+        }
+
+        if (!javax.swing.SwingUtilities.isEventDispatchThread()) {
+            javax.swing.SwingUtilities.invokeLater(() -> mostrarToast(mensaje, acento));
+            return;
+        }
+
+        if (!isShowing()) {
+            return;
+        }
+
+        if (toastPopup != null) {
+            toastPopup.hide();
+            toastPopup = null;
+        }
+
+        if (toastTimer != null && toastTimer.isRunning()) {
+            toastTimer.stop();
+        }
+
+        javax.swing.JLabel label = new javax.swing.JLabel(mensaje);
+        label.setFont(new java.awt.Font("Segoe UI", java.awt.Font.BOLD, 13));
+        label.setForeground(java.awt.Color.WHITE);
+        label.setBorder(javax.swing.BorderFactory.createEmptyBorder(10, 14, 10, 14));
+
+        javax.swing.JPanel panel = new javax.swing.JPanel(new java.awt.BorderLayout());
+        panel.setBackground(acento);
+        panel.setBorder(javax.swing.BorderFactory.createCompoundBorder(
+                javax.swing.BorderFactory.createLineBorder(new java.awt.Color(255, 255, 255, 180)),
+                javax.swing.BorderFactory.createEmptyBorder(0, 0, 0, 0)));
+        panel.add(label, java.awt.BorderLayout.CENTER);
+
+        java.awt.Point location;
+
+        try {
+            location = getLocationOnScreen();
+        } catch (java.awt.IllegalComponentStateException e) {
+            return;
+        }
+
+        java.awt.Dimension size = panel.getPreferredSize();
+        int x = location.x + Math.max(12, getWidth() - size.width - 24);
+        int y = location.y + 54;
+
+        toastPopup = javax.swing.PopupFactory.getSharedInstance().getPopup(this, panel, x, y);
+        toastPopup.show();
+
+        toastTimer = new javax.swing.Timer(1800, e -> {
+            if (toastPopup != null) {
+                toastPopup.hide();
+                toastPopup = null;
+            }
+        });
+        toastTimer.setRepeats(false);
+        toastTimer.start();
+    }
+
     private void asignarTiempoInicioSiEsPrimeraVez(BCP bcp) {
         if (bcp == null) return;
 
@@ -309,7 +422,7 @@ public class Interfaz extends javax.swing.JPanel {
         tabla.setShowGrid(false);
         tabla.setIntercellSpacing(new java.awt.Dimension(0, 0));
         tabla.setFont(new java.awt.Font("Consolas", java.awt.Font.PLAIN, 13));
-        tabla.setForeground(new java.awt.Color(44, 57, 75));
+        tabla.setForeground(COLOR_TEXTO_BASE);
         tabla.setSelectionBackground(new java.awt.Color(220, 234, 255));
         tabla.setSelectionForeground(new java.awt.Color(20, 40, 80));
         tabla.getTableHeader().setFont(new java.awt.Font("Segoe UI", java.awt.Font.BOLD, 12));
@@ -381,8 +494,39 @@ public class Interfaz extends javax.swing.JPanel {
             sb.append(pila[i]);
         }
         sb.append("]");
+        aplicarColorBCPActual(bcp);
         lblBcpPila.setText(bcp.getPuntero_pila() < 0 ? "vacía" : sb.toString());
     }
+    private void aplicarColorBCPActual(BCP bcp) {
+        java.awt.Color color = obtenerColorBCP(bcp != null ? bcp.getIdProceso() : "");
+
+        javax.swing.JLabel[] valores = {
+            lblBcpId, lblBcpNombre, lblBcpEstado, lblBcpBase, lblBcpLimite,
+            lblBcpPila, lblBcpPrioridad, lblBcpSiguiente, lblBcpTiempoInicio,
+            lblBcpTiempoEmpleado, lblBcpArchivos, lblBcpCpu,
+            ac, ax, bx, cx, dx, al, jLabel10, jLabel11
+        };
+
+        for (javax.swing.JLabel label : valores) {
+            label.setForeground(color);
+            label.setFont(label.getFont().deriveFont(java.awt.Font.BOLD));
+        }
+    }
+
+    private void restaurarColorBCPActual() {
+        javax.swing.JLabel[] valores = {
+            lblBcpId, lblBcpNombre, lblBcpEstado, lblBcpBase, lblBcpLimite,
+            lblBcpPila, lblBcpPrioridad, lblBcpSiguiente, lblBcpTiempoInicio,
+            lblBcpTiempoEmpleado, lblBcpArchivos, lblBcpCpu,
+            ac, ax, bx, cx, dx, al, jLabel10, jLabel11
+        };
+
+        for (javax.swing.JLabel label : valores) {
+            label.setForeground(new java.awt.Color(22, 34, 51));
+            label.setFont(label.getFont().deriveFont(java.awt.Font.BOLD));
+        }
+    }
+
     private BCP obtenerBCPVisible() {
         CPU cpuActual = obtenerCpuSeleccionada();
 
@@ -468,6 +612,36 @@ public class Interfaz extends javax.swing.JPanel {
         return false;
     }
 
+    private String obtenerIdProcesoPorPosicionMemoria(int posicion) {
+        if (memoria == null || posicion < 0) {
+            return "";
+        }
+
+        if (posicion < memoria.getInicioUsuario()) {
+            int inicioBCP = (posicion / TAMANO_BCP) * TAMANO_BCP;
+            String[] mem = memoria.getMemoria();
+
+            if (inicioBCP >= 0 && inicioBCP < memoria.getPunteroSO() && inicioBCP < mem.length) {
+                String idProceso = mem[inicioBCP];
+                return idProceso == null ? "" : idProceso;
+            }
+
+            return "";
+        }
+
+        for (BCP bcp : memoria.obtenerTodosBCPsEnMemoria()) {
+            if (bcp == null) {
+                continue;
+            }
+
+            if (posicion >= bcp.getBase() && posicion <= bcp.getLimite()) {
+                return bcp.getIdProceso();
+            }
+        }
+
+        return "";
+    }
+
     private String formatearValorMemoriaKernel(int posicion, String valor) {
         if (memoria == null || posicion < 0 || posicion >= memoria.getPunteroSO()) {
             return valor;
@@ -532,6 +706,7 @@ public class Interfaz extends javax.swing.JPanel {
         jLabel10.setText("PC:");       jLabel11.setText("IR:");
         ac.setText("0"); ax.setText("0"); bx.setText("0");
         cx.setText("0"); dx.setText("0"); al.setText("0");
+        restaurarColorBCPActual();
     }
 
     public void actualizarTablaMemoria() {
@@ -610,8 +785,18 @@ public class Interfaz extends javax.swing.JPanel {
         ((javax.swing.table.DefaultTableModel) tabla.getModel()).setRowCount(0);
     }
         public void imprimirTerminal(String mensaje) {
-        terminalArea.append(">> " + mensaje + "\n");
+        if (!javax.swing.SwingUtilities.isEventDispatchThread()) {
+            javax.swing.SwingUtilities.invokeLater(() -> imprimirTerminal(mensaje));
+            return;
+        }
+
+        String texto = mensaje == null ? "" : mensaje;
+        terminalArea.append(">> " + texto + "\n");
         terminalArea.setCaretPosition(terminalArea.getDocument().getLength());
+
+        if (!texto.contains("\n") && texto.length() <= 120) {
+            mostrarToast(texto);
+        }
     }
     public void activarEntrada() {
         terminalInput.setEnabled(true);
@@ -674,18 +859,21 @@ public class Interfaz extends javax.swing.JPanel {
                     table, value, isSelected, hasFocus, row, column
             );
 
+            String idActual = getIdProcesoActual();
+            String idFila = String.valueOf(table.getValueAt(row, 0));
+            boolean procesoActivo = (!idActual.isBlank() && idActual.equals(idFila))
+                    || esProcesoActivoEnAlgunaCPU(idFila);
+
             if (!isSelected) {
                 c.setBackground(row % 2 == 0 ? java.awt.Color.WHITE : new java.awt.Color(246, 248, 251));
 
-                String idActual = getIdProcesoActual();
-                String idFila = String.valueOf(table.getValueAt(row, 0));
-
-                if ((!idActual.isBlank() && idActual.equals(idFila))
-                        || esProcesoActivoEnAlgunaCPU(idFila)) {
+                if (procesoActivo) {
                     c.setBackground(COLOR_EJECUCION);
                 }
             }
 
+            c.setForeground(obtenerColorBCP(idFila));
+            c.setFont(table.getFont().deriveFont(procesoActivo ? java.awt.Font.BOLD : java.awt.Font.PLAIN));
             setBorder(javax.swing.BorderFactory.createEmptyBorder(0, 8, 0, 8));
             return c;
         }
@@ -869,6 +1057,11 @@ public class Interfaz extends javax.swing.JPanel {
             }
 
             boolean instruccionActual = esInstruccionActualEnAlgunaCPU(posicion);
+            String idProcesoPosicion = obtenerIdProcesoPorPosicionMemoria(posicion);
+            boolean filaBCP = memoria != null
+                    && posicion >= 0
+                    && posicion < memoria.getInicioUsuario()
+                    && !idProcesoPosicion.isBlank();
 
             if (!isSelected) {
                 java.awt.Color colorBloque = obtenerColorBloqueMemoriaFisica(posicion);
@@ -893,10 +1086,16 @@ public class Interfaz extends javax.swing.JPanel {
                 }
             }
 
-            if (instruccionActual) {
+            if (!idProcesoPosicion.isBlank()) {
+                c.setForeground(obtenerColorBCP(idProcesoPosicion));
+            } else {
+                c.setForeground(table.getForeground());
+            }
+
+            if (instruccionActual || filaBCP) {
                 c.setFont(table.getFont().deriveFont(java.awt.Font.BOLD));
 
-                if (column == 1) {
+                if (instruccionActual && column == 1) {
                     String texto = value == null ? "" : String.valueOf(value);
                     setText("> " + texto);
                 }
@@ -1104,7 +1303,10 @@ public class Interfaz extends javax.swing.JPanel {
                 new String[]{"FCFS", "SJF", "SRT", "RR", "SRR", "HRRN", "Lottery"}
         ));
         cmbAlgoritmo.setSelectedItem("FCFS");
-        cmbAlgoritmo.addActionListener(e -> actualizarVisibilidadQuantum());
+        cmbAlgoritmo.addActionListener(e -> {
+            actualizarVisibilidadQuantum();
+            resetPlanificadorEjecucion();
+        });
 
         lblQuantum.setText("Quantum:");
         lblQuantum.setFont(new java.awt.Font("Segoe UI", java.awt.Font.BOLD, 13));
@@ -1645,7 +1847,7 @@ public class Interfaz extends javax.swing.JPanel {
                         .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.RELATED)
                         .addComponent(jScrollPane3, javax.swing.GroupLayout.PREFERRED_SIZE, 420, javax.swing.GroupLayout.PREFERRED_SIZE)
                         .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.RELATED)
-                        .addGroup(layout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING, false)
+                        .addGroup(layout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
                             .addGroup(javax.swing.GroupLayout.Alignment.TRAILING, layout.createSequentialGroup()
                                 .addComponent(terminalInput)
                                 .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.UNRELATED)
@@ -1653,7 +1855,7 @@ public class Interfaz extends javax.swing.JPanel {
                             .addGroup(layout.createSequentialGroup()
                                 .addComponent(jScrollPane1, javax.swing.GroupLayout.PREFERRED_SIZE, 257, javax.swing.GroupLayout.PREFERRED_SIZE)
                                 .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.RELATED)
-                                .addComponent(jScrollPane5, javax.swing.GroupLayout.PREFERRED_SIZE, javax.swing.GroupLayout.DEFAULT_SIZE, javax.swing.GroupLayout.PREFERRED_SIZE))
+                                .addComponent(jScrollPane5, javax.swing.GroupLayout.DEFAULT_SIZE, javax.swing.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE))
                             .addComponent(jScrollPane6, javax.swing.GroupLayout.DEFAULT_SIZE, 811, Short.MAX_VALUE))))
                 .addContainerGap(javax.swing.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE))
         );
@@ -1675,7 +1877,7 @@ public class Interfaz extends javax.swing.JPanel {
                     .addComponent(lblCantidadCpus)
                     .addComponent(cmbCantidadCpus, javax.swing.GroupLayout.PREFERRED_SIZE, javax.swing.GroupLayout.DEFAULT_SIZE, javax.swing.GroupLayout.PREFERRED_SIZE))
                 .addGap(35, 35, 35)
-                .addGroup(layout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING, false)
+                .addGroup(layout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
                     .addGroup(layout.createSequentialGroup()
                         .addGroup(layout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING, false)
                             .addGroup(layout.createSequentialGroup()
@@ -1695,8 +1897,8 @@ public class Interfaz extends javax.swing.JPanel {
                             .addGroup(layout.createSequentialGroup()
                                 .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.RELATED)
                                 .addComponent(jScrollPane2, javax.swing.GroupLayout.PREFERRED_SIZE, 0, Short.MAX_VALUE))))
-                    .addComponent(jScrollPane3, javax.swing.GroupLayout.PREFERRED_SIZE, 751, javax.swing.GroupLayout.PREFERRED_SIZE))
-                .addContainerGap(60, Short.MAX_VALUE))
+                    .addComponent(jScrollPane3, javax.swing.GroupLayout.DEFAULT_SIZE, 751, Short.MAX_VALUE))
+                .addContainerGap())
         );
     }// </editor-fold>//GEN-END:initComponents
     private boolean validarSistema() {
@@ -1848,7 +2050,10 @@ public class Interfaz extends javax.swing.JPanel {
         terminalInput.setEnabled(false);
         btnEnviar.setEnabled(false);
 
+        resetPlanificadorEjecucion();
+
         tiempoGlobal = 0;
+        coloresPorBCP.clear();
         procesosBasePlanificacion.clear();
         historialEstadisticas.clear();
         contadorEjecucionesEstadisticas = 0;
@@ -2000,6 +2205,39 @@ public class Interfaz extends javax.swing.JPanel {
         } catch (Exception e) {
             return 2;
         }
+    }
+
+    private void resetPlanificadorEjecucion() {
+        algoritmoEjecucionActual = "";
+        quantumEjecucionActual = -1;
+        fcfsRuntime = new FCFS();
+        sjfRuntime = new SJF();
+        srtRuntime = new SRT();
+        rrRuntime = null;
+        srrRuntime = null;
+        hrrnRuntime = new HRRN();
+        lotteryRuntime = null;
+    }
+
+    private void asegurarPlanificadorEjecucion() {
+        String algoritmo = (cmbAlgoritmo == null) ? "FCFS" : String.valueOf(cmbAlgoritmo.getSelectedItem());
+        int quantum = obtenerQuantumSeleccionado();
+
+        if (algoritmo.equals(algoritmoEjecucionActual)
+                && (!algoritmoUsaQuantum(algoritmo) || quantum == quantumEjecucionActual)) {
+            return;
+        }
+
+        algoritmoEjecucionActual = algoritmo;
+        quantumEjecucionActual = quantum;
+
+        fcfsRuntime = new FCFS();
+        sjfRuntime = new SJF();
+        srtRuntime = new SRT();
+        hrrnRuntime = new HRRN();
+        rrRuntime = "RR".equals(algoritmo) ? new RR(quantum) : null;
+        srrRuntime = "SRR".equals(algoritmo) ? new SRR(quantum, 1, 3) : null;
+        lotteryRuntime = "Lottery".equals(algoritmo) ? new Lottery(quantum) : null;
     }
 
     private void registrarProcesoBaseParaPlanificacion(BCP bcp) {
@@ -2224,6 +2462,7 @@ public class Interfaz extends javax.swing.JPanel {
             }
 
             asignarTiempoInicioSiEsPrimeraVez(bcp);
+            bcp.setIniciado(true);
 
             // Si el algoritmo usa quantum, inicializar quantum restante
             if (algoritmoUsaQuantum(String.valueOf(cmbAlgoritmo.getSelectedItem()))) {
@@ -2248,36 +2487,120 @@ public class Interfaz extends javax.swing.JPanel {
         }
 
         String algoritmo = (cmbAlgoritmo == null) ? "FCFS" : String.valueOf(cmbAlgoritmo.getSelectedItem());
-
         java.util.List<BCP> todos = memoria.obtenerTodosBCPsEnMemoria();
+        asegurarPlanificadorEjecucion();
 
-        // Round-Robin / SRR: seleccionar siguiente proceso preparado de forma circular
-        if ("RR".equals(algoritmo) || "SRR".equals(algoritmo)) {
-            if (todos == null || todos.isEmpty()) return null;
+        switch (algoritmo) {
+            case "SJF":
+                return sjfRuntime.selectNext(todos, tiempoGlobal);
 
-            int n = todos.size();
-            int start = (lastIndexSeleccionado + 1) % n;
+            case "SRT":
+                return srtRuntime.selectNext(todos, tiempoGlobal);
 
-            for (int i = 0; i < n; i++) {
-                int idx = (start + i) % n;
-                BCP bcp = todos.get(idx);
-                if (bcp != null && "preparado".equalsIgnoreCase(bcp.getEstado())) {
-                    lastIndexSeleccionado = idx;
-                    return bcp;
-                }
-            }
+            case "RR":
+                return rrRuntime != null ? rrRuntime.selectNext(todos, tiempoGlobal) : null;
 
-            return null;
+            case "SRR":
+                BCP seleccionadoSRR = srrRuntime != null ? srrRuntime.selectNext(todos, tiempoGlobal) : null;
+                guardarCambiosPlanificador(todos);
+                return seleccionadoSRR;
+
+            case "HRRN":
+                return hrrnRuntime.selectNext(todos, tiempoGlobal);
+
+            case "Lottery":
+                return lotteryRuntime != null ? lotteryRuntime.selectNext(todos, tiempoGlobal) : null;
+
+            case "FCFS":
+            default:
+                return fcfsRuntime.selectNext(todos, tiempoGlobal);
+        }
+    }
+
+    private void guardarCambiosPlanificador(java.util.List<BCP> procesos) {
+        if (procesos == null || memoria == null) {
+            return;
         }
 
-        // Default: FCFS
-        for (BCP bcp : todos) {
-            if (bcp != null && "preparado".equalsIgnoreCase(bcp.getEstado())) {
-                return bcp;
+        for (BCP proceso : procesos) {
+            if (proceso != null) {
+                memoria.actualizarBCPPorId(proceso);
             }
         }
+    }
 
-        return null;
+    private void aplicarPreempcionSRT() {
+        if (!"SRT".equals(String.valueOf(cmbAlgoritmo.getSelectedItem())) || memoria == null) {
+            return;
+        }
+
+        asegurarPlanificadorEjecucion();
+
+        for (int i = 0; i < cpus.size(); i++) {
+            CPU cpuActual = cpus.get(i);
+
+            if (cpuActual == null
+                    || cpuActual.getBcp() == null
+                    || cpuActual.isInterrupcion()
+                    || cpuActual.isProcesoFinalizado()) {
+                continue;
+            }
+
+            BCP procesoActual = cpuActual.getBcp();
+            BCP candidato = srtRuntime.selectNext(memoria.obtenerTodosBCPsEnMemoria(), tiempoGlobal);
+
+            if (candidato == null) {
+                continue;
+            }
+
+            int restanteActual = obtenerRafagaRestantePlanificacion(procesoActual);
+            int restanteCandidato = obtenerRafagaRestantePlanificacion(candidato);
+
+            if (restanteCandidato >= restanteActual) {
+                continue;
+            }
+
+            procesoActual.setEstado("preparado");
+            procesoActual.setCpuAsignado(-1);
+            memoria.actualizarBCPPorId(procesoActual);
+            dispatcher.actualizarBCP(procesoActual);
+
+            cpuActual.liberarBcp();
+
+            asignarTiempoInicioSiEsPrimeraVez(candidato);
+            candidato.setIniciado(true);
+            candidato.setCpuAsignado(i);
+            cpuActual.CargarBcp(candidato);
+            memoria.actualizarBCPPorId(cpuActual.getBcp());
+            dispatcher.actualizarBCP(cpuActual.getBcp());
+
+            final int cpuIndex = i;
+            final String procesoEntra = candidato.getIdProceso();
+            final String procesoSale = procesoActual.getIdProceso();
+            javax.swing.SwingUtilities.invokeLater(() ->
+                    imprimirTerminal("CPU " + cpuIndex + " SRT cambia "
+                            + procesoSale + " por " + procesoEntra));
+        }
+    }
+
+    private int obtenerRafagaRestantePlanificacion(BCP bcp) {
+        if (bcp == null) {
+            return Integer.MAX_VALUE;
+        }
+
+        if (bcp.getRafagaRestante() > 0) {
+            return bcp.getRafagaRestante();
+        }
+
+        if (bcp.getRafagaTotal() > 0) {
+            return bcp.getRafagaTotal();
+        }
+
+        if (bcp.getBase() >= 0 && bcp.getLimite() >= bcp.getBase()) {
+            return bcp.getLimite() - bcp.getBase() + 1;
+        }
+
+        return Integer.MAX_VALUE;
     }
 
     private boolean ejecutarCicloDosCPUs() throws Exception {
@@ -2303,6 +2626,11 @@ public class Interfaz extends javax.swing.JPanel {
 
             if (ejecuto) {
                 ejecutoAlMenosUnaCPU = true;
+                BCP procesoEjecutado = cpuActual.getBcp();
+
+                if (procesoEjecutado != null && procesoEjecutado.getRafagaRestante() > 0) {
+                    procesoEjecutado.setRafagaRestante(procesoEjecutado.getRafagaRestante() - 1);
+                }
             }
 
             BCP bcpActualizado = cpuActual.getBcp();
@@ -2374,6 +2702,7 @@ public class Interfaz extends javax.swing.JPanel {
 
             BCP procesoFinalizado = cpuActual.getBcp();
             procesoFinalizado.setCpuAsignado(-1);
+            procesoFinalizado.setRafagaRestante(0);
 
             if (procesoFinalizado.getTiempoFinal() < 0) {
                 procesoFinalizado.setTiempoFinal(tiempoGlobal);
@@ -2406,6 +2735,7 @@ public class Interfaz extends javax.swing.JPanel {
                 while (!memoria.vacio() || hayCpuActiva()) {
                     finalizarProcesosTerminados();
                     asignarProcesosACpusDisponibles();
+                    aplicarPreempcionSRT();
 
                     if (!hayCpuActiva()) {
                         break;
@@ -2444,8 +2774,10 @@ public class Interfaz extends javax.swing.JPanel {
         memoria = null; disco = null; cpu = null; dispatcher = null;
         cpus.clear();
         cpuSeleccionado = 0;
+        resetPlanificadorEjecucion();
         actualizarSelectorCpu();
         tiempoGlobal = 0;
+        coloresPorBCP.clear();
         terminalArea.setText("");
         limpiarTabla(tablaMemoria);
         limpiarTabla(tablaMemoriaVirtual);
@@ -2470,6 +2802,7 @@ public class Interfaz extends javax.swing.JPanel {
             try {
                 finalizarProcesosTerminados();
                 asignarProcesosACpusDisponibles();
+                aplicarPreempcionSRT();
 
                 if (!hayCpuActiva()) {
                     imprimirTerminal("Todos los procesos finalizados.");

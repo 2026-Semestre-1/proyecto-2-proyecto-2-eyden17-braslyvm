@@ -18,12 +18,38 @@ import java.util.Queue;
 public class RR {
 
     private final int quantum;
+    private int lastSelectedIndex = -1;
 
     public RR(int quantum) {
         if (quantum <= 0) {
             throw new IllegalArgumentException("Quantum must be greater than zero");
         }
         this.quantum = quantum;
+    }
+
+    public BCP selectNext(List<BCP> processes, int currentTime) {
+        if (processes == null || processes.isEmpty()) {
+            return null;
+        }
+
+        int n = processes.size();
+        int start = Math.floorMod(lastSelectedIndex + 1, n);
+
+        for (int i = 0; i < n; i++) {
+            int index = (start + i) % n;
+            BCP process = processes.get(index);
+
+            if (isReady(process, currentTime)) {
+                lastSelectedIndex = index;
+                return process;
+            }
+        }
+
+        return null;
+    }
+
+    public int getQuantum() {
+        return quantum;
     }
 
     public List<BCP> schedule(List<BCP> processes) {
@@ -90,5 +116,11 @@ public class RR {
             }
         }
 
+    }
+
+    private boolean isReady(BCP process, int currentTime) {
+        return process != null
+                && "preparado".equalsIgnoreCase(process.getEstado())
+                && process.getTiempoLlegada() <= currentTime;
     }
 }

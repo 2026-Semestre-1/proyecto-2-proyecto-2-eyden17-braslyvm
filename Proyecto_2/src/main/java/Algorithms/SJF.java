@@ -15,6 +15,26 @@ import java.util.List;
  */
 public class SJF {
 
+    public BCP selectNext(List<BCP> processes, int currentTime) {
+        if (processes == null) {
+            return null;
+        }
+
+        BCP shortestProcess = null;
+
+        for (BCP process : processes) {
+            if (!isReady(process, currentTime)) {
+                continue;
+            }
+
+            if (shortestProcess == null || getBurstTime(process) < getBurstTime(shortestProcess)) {
+                shortestProcess = process;
+            }
+        }
+
+        return shortestProcess;
+    }
+
     public List<BCP> schedule(List<BCP> processes) {
         List<BCP> pendingProcesses = new ArrayList<>();
         List<BCP> finishedProcesses = new ArrayList<>();
@@ -89,5 +109,11 @@ public class SJF {
         }
 
         return 0;
+    }
+
+    private boolean isReady(BCP process, int currentTime) {
+        return process != null
+                && "preparado".equalsIgnoreCase(process.getEstado())
+                && process.getTiempoLlegada() <= currentTime;
     }
 }

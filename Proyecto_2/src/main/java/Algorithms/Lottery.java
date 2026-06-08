@@ -37,6 +37,20 @@ public class Lottery {
         this.random = new Random(seed);
     }
 
+    public BCP selectNext(List<BCP> processes, int currentTime) {
+        List<BCP> availableProcesses = getAvailableReadyProcesses(processes, currentTime);
+
+        if (availableProcesses.isEmpty()) {
+            return null;
+        }
+
+        return selectWinningProcess(availableProcesses);
+    }
+
+    public int getQuantum() {
+        return quantum;
+    }
+
     public List<BCP> schedule(List<BCP> processes) {
         List<BCP> pendingProcesses = new ArrayList<>();
         List<BCP> finishedProcesses = new ArrayList<>();
@@ -98,6 +112,25 @@ public class Lottery {
 
         for (BCP process : pendingProcesses) {
             if (process.getTiempoLlegada() <= currentTime && process.getRafagaRestante() > 0) {
+                availableProcesses.add(process);
+            }
+        }
+
+        return availableProcesses;
+    }
+
+    private List<BCP> getAvailableReadyProcesses(List<BCP> processes, int currentTime) {
+        List<BCP> availableProcesses = new ArrayList<>();
+
+        if (processes == null) {
+            return availableProcesses;
+        }
+
+        for (BCP process : processes) {
+            if (process != null
+                    && "preparado".equalsIgnoreCase(process.getEstado())
+                    && process.getTiempoLlegada() <= currentTime
+                    && process.getRafagaRestante() > 0) {
                 availableProcesses.add(process);
             }
         }

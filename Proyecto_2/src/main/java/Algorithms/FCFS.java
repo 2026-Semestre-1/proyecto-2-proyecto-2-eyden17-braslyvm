@@ -18,6 +18,27 @@ import java.util.List;
  */
 public class FCFS {
 
+    public BCP selectNext(List<BCP> processes, int currentTime) {
+        if (processes == null) {
+            return null;
+        }
+
+        BCP selected = null;
+
+        for (BCP process : processes) {
+            if (!isReady(process, currentTime)) {
+                continue;
+            }
+
+            if (selected == null
+                    || process.getTiempoLlegada() < selected.getTiempoLlegada()) {
+                selected = process;
+            }
+        }
+
+        return selected;
+    }
+
     public List<BCP> schedule(List<BCP> processes) {
         List<BCP> readyQueue = new ArrayList<>();
 
@@ -82,5 +103,11 @@ public class FCFS {
         }
 
         return 0;
+    }
+
+    private boolean isReady(BCP process, int currentTime) {
+        return process != null
+                && "preparado".equalsIgnoreCase(process.getEstado())
+                && process.getTiempoLlegada() <= currentTime;
     }
 }

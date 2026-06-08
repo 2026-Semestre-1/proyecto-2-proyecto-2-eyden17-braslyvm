@@ -15,6 +15,30 @@ import java.util.List;
  */
 public class HRRN {
 
+    public BCP selectNext(List<BCP> processes, int currentTime) {
+        if (processes == null) {
+            return null;
+        }
+
+        BCP selectedProcess = null;
+        double highestRatio = -1.0;
+
+        for (BCP process : processes) {
+            if (!isReady(process, currentTime)) {
+                continue;
+            }
+
+            double responseRatio = calculateResponseRatio(process, currentTime);
+
+            if (selectedProcess == null || responseRatio > highestRatio) {
+                selectedProcess = process;
+                highestRatio = responseRatio;
+            }
+        }
+
+        return selectedProcess;
+    }
+
     public List<BCP> schedule(List<BCP> processes) {
         List<BCP> pendingProcesses = new ArrayList<>();
         List<BCP> finishedProcesses = new ArrayList<>();
@@ -117,5 +141,11 @@ public class HRRN {
         }
 
         return 0;
+    }
+
+    private boolean isReady(BCP process, int currentTime) {
+        return process != null
+                && "preparado".equalsIgnoreCase(process.getEstado())
+                && process.getTiempoLlegada() <= currentTime;
     }
 }

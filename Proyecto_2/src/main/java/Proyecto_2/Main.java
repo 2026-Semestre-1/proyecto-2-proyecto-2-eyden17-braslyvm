@@ -1,32 +1,22 @@
-/*
- * Click nbfs://nbhost/SystemFileSystem/Templates/Licenses/license-default.txt to change this license
- * Click nbfs://nbhost/SystemFileSystem/Templates/Classes/Class.java to edit this template
- */
 package Proyecto_2;
 
-/**
- *
- * @author braslyvm
- */
-
-
 import UI.Interfaz;
+import java.awt.Dimension;
 import javax.swing.JFrame;
+import javax.swing.SwingUtilities;
 
 public class Main {
     public static void main(String[] args) {
-        // Crear ventana
-        JFrame frame = new JFrame("Interfaz");
-
-        // Agregar tu JPanel
-        frame.setContentPane(new Interfaz());
-
-        // Configuración básica
-        frame.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
-        frame.pack(); // ajusta al tamaño del JPanel
-        frame.setLocationRelativeTo(null); // centrar en pantalla
-
-        // Mostrar
-        frame.setVisible(true);
+        SwingUtilities.invokeLater(() -> {
+            JFrame frame = new JFrame("Proyecto 2 - Simulador SO");
+            frame.setContentPane(new Interfaz());
+            frame.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
+            frame.setMinimumSize(new Dimension(1200, 760));
+            frame.pack();
+            frame.setLocationRelativeTo(null);
+            frame.setVisible(true);
+            frame.toFront();
+            frame.requestFocus();
+        });
     }
 }

@@ -15,6 +15,27 @@ import java.util.List;
  */
 public class SRT {
 
+    public BCP selectNext(List<BCP> processes, int currentTime) {
+        if (processes == null) {
+            return null;
+        }
+
+        BCP shortestProcess = null;
+
+        for (BCP process : processes) {
+            if (!isReady(process, currentTime)) {
+                continue;
+            }
+
+            if (shortestProcess == null
+                    || getRemainingTime(process) < getRemainingTime(shortestProcess)) {
+                shortestProcess = process;
+            }
+        }
+
+        return shortestProcess;
+    }
+
     public List<BCP> schedule(List<BCP> processes) {
         List<BCP> pendingProcesses = new ArrayList<>();
         List<BCP> finishedProcesses = new ArrayList<>();
@@ -86,5 +107,24 @@ public class SRT {
         }
 
         return nextArrivalTime;
+    }
+
+    private int getRemainingTime(BCP process) {
+        if (process.getRafagaRestante() > 0) {
+            return process.getRafagaRestante();
+        }
+
+        if (process.getRafagaTotal() > 0) {
+            return process.getRafagaTotal();
+        }
+
+        return Integer.MAX_VALUE;
+    }
+
+    private boolean isReady(BCP process, int currentTime) {
+        return process != null
+                && "preparado".equalsIgnoreCase(process.getEstado())
+                && process.getTiempoLlegada() <= currentTime
+                && getRemainingTime(process) > 0;
     }
 }

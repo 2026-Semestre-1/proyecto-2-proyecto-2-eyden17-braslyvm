@@ -624,7 +624,6 @@ public class Memoria {
             );
                 this.BestFit_Strategy = null;
                 this.partitio_Strategy = null;
-                System.out.println("Pagination todavía no está implementado.");
                 break;
 
             case "Partition_Equal":

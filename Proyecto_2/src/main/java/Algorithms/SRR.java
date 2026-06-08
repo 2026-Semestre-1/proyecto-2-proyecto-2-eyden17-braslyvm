@@ -20,6 +20,7 @@ public class SRR {
     private final int quantum;
     private final int newPriorityRate;
     private final int acceptedPriorityRate;
+    private int lastSelectedIndex = -1;
 
     public SRR(int quantum, int newPriorityRate, int acceptedPriorityRate) {
         if (quantum <= 0) {
@@ -29,6 +30,43 @@ public class SRR {
         this.quantum = quantum;
         this.newPriorityRate = newPriorityRate;
         this.acceptedPriorityRate = acceptedPriorityRate;
+    }
+
+    public BCP selectNext(List<BCP> processes, int currentTime) {
+        if (processes == null || processes.isEmpty()) {
+            return null;
+        }
+
+        increaseRuntimePriorities(processes, currentTime);
+
+        int n = processes.size();
+        int start = Math.floorMod(lastSelectedIndex + 1, n);
+        BCP selected = null;
+        int selectedIndex = -1;
+
+        for (int i = 0; i < n; i++) {
+            int index = (start + i) % n;
+            BCP process = processes.get(index);
+
+            if (!isReady(process, currentTime)) {
+                continue;
+            }
+
+            if (selected == null || process.getPrioridad() > selected.getPrioridad()) {
+                selected = process;
+                selectedIndex = index;
+            }
+        }
+
+        if (selectedIndex >= 0) {
+            lastSelectedIndex = selectedIndex;
+        }
+
+        return selected;
+    }
+
+    public int getQuantum() {
+        return quantum;
     }
 
     public List<BCP> schedule(List<BCP> processes) {
@@ -149,5 +187,30 @@ public class SRR {
         }
 
         return lowestPriority;
+    }
+
+    private void increaseRuntimePriorities(List<BCP> processes, int currentTime) {
+        for (BCP process : processes) {
+            if (process == null || process.getTiempoLlegada() > currentTime) {
+                continue;
+            }
+
+            if (!"preparado".equalsIgnoreCase(process.getEstado())) {
+                continue;
+            }
+
+            if ("preparado".equalsIgnoreCase(process.getEstado())) {
+                process.setPrioridad(process.getPrioridad() + newPriorityRate);
+            } else if ("ejecuciÃ³n".equalsIgnoreCase(process.getEstado())
+                    || "ejecucion".equalsIgnoreCase(process.getEstado())) {
+                process.setPrioridad(process.getPrioridad() + acceptedPriorityRate);
+            }
+        }
+    }
+
+    private boolean isReady(BCP process, int currentTime) {
+        return process != null
+                && "preparado".equalsIgnoreCase(process.getEstado())
+                && process.getTiempoLlegada() <= currentTime;
     }
 }
