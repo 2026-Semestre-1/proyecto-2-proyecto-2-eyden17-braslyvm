@@ -155,7 +155,9 @@ public class Disco {
     public int obtenerIndiceProcesoVirtualQueQuepa(Memoria memoriaPrincipal) {
         for (int i = 0; i < instruccionesVirtuales.size(); i++) {
             String[] instrucciones = instruccionesVirtuales.get(i);
-            if (memoriaPrincipal.hayEspacioUsuario(instrucciones.length)) {
+
+            
+            if (memoriaPrincipal.hayEspacioParaProceso(instrucciones)) {
                 return i;
             }
         }
