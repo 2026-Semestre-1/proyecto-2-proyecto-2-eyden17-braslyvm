@@ -66,6 +66,7 @@ public class CPU {
 
 
         bcp.setIr(instruccion);
+        bcp.setUltimaDireccionEjecutada(pc);
         boolean Salto = EjecutarIntruccion(instruccion);
 
         if (!Salto) {

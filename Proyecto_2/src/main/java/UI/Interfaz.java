@@ -66,7 +66,7 @@ public class Interfaz extends javax.swing.JPanel {
     private static final java.awt.Color COLOR_EJECUCION = new java.awt.Color(255, 249, 196);
     private static final java.awt.Color COLOR_INSTRUCCION = new java.awt.Color(255, 236, 179);
     private static final java.awt.Color COLOR_TEXTO_BASE = new java.awt.Color(44, 57, 75);
-    private static final java.awt.Color COLOR_TOAST = new java.awt.Color(21, 101, 192);
+    private static final java.awt.Color COLOR_TOAST = java.awt.Color.BLACK;
     private static final String[] CAMPOS_BCP_KERNEL = {
         "idProceso",
         "nombreProceso",
@@ -393,8 +393,8 @@ public class Interfaz extends javax.swing.JPanel {
         }
 
         java.awt.Dimension size = panel.getPreferredSize();
-        int x = location.x + Math.max(12, getWidth() - size.width - 24);
-        int y = location.y + 54;
+        int x = location.x + Math.max(12, (getWidth() - size.width) / 2);
+        int y = location.y + Math.max(12, (getHeight() - size.height) / 2);
 
         toastPopup = javax.swing.PopupFactory.getSharedInstance().getPopup(this, panel, x, y);
         toastPopup.show();
@@ -604,12 +604,28 @@ public class Interfaz extends javax.swing.JPanel {
         for (CPU cpuActual : cpus) {
             if (cpuActual != null
                     && cpuActual.getBcp() != null
-                    && posicion == cpuActual.getBcp().getPc()) {
+                    && posicion == obtenerDireccionMarcada(cpuActual.getBcp())) {
                 return true;
             }
         }
 
+        if (cpu != null
+                && cpu.getBcp() != null
+                && posicion == obtenerDireccionMarcada(cpu.getBcp())) {
+            return true;
+        }
+
         return false;
+    }
+
+    private int obtenerDireccionMarcada(BCP bcp) {
+        if (bcp == null) {
+            return -1;
+        }
+
+        return bcp.getUltimaDireccionEjecutada() >= 0
+                ? bcp.getUltimaDireccionEjecutada()
+                : bcp.getPc();
     }
 
     private String obtenerIdProcesoPorPosicionMemoria(int posicion) {
@@ -793,10 +809,6 @@ public class Interfaz extends javax.swing.JPanel {
         String texto = mensaje == null ? "" : mensaje;
         terminalArea.append(">> " + texto + "\n");
         terminalArea.setCaretPosition(terminalArea.getDocument().getLength());
-
-        if (!texto.contains("\n") && texto.length() <= 120) {
-            mostrarToast(texto);
-        }
     }
     public void activarEntrada() {
         terminalInput.setEnabled(true);
@@ -1316,7 +1328,7 @@ public class Interfaz extends javax.swing.JPanel {
         lblCantidadCpus = new javax.swing.JLabel("CPUs:");
         lblCantidadCpus.setFont(new java.awt.Font("Segoe UI", java.awt.Font.BOLD, 13));
 
-        cmbCantidadCpus = new javax.swing.JComboBox<>(new String[]{"1", "2", "3", "4", "5"});
+        cmbCantidadCpus = new javax.swing.JComboBox<>(new String[]{"1", "2", "3", "4"});
         cmbCantidadCpus.setSelectedItem(String.valueOf(DEFAULT_CPU_COUNT));
         cmbCantidadCpus.setFont(new java.awt.Font("Segoe UI", java.awt.Font.PLAIN, 13));
         cmbCantidadCpus.setPreferredSize(new java.awt.Dimension(60, 28));
@@ -1334,6 +1346,7 @@ public class Interfaz extends javax.swing.JPanel {
             limpiarTabla(tablaProcesos);
             limpiarBCP();
             imprimirTerminal("CPUs ajustadas a " + nuevaCantidad + ". Cola de procesos reiniciada.");
+            mostrarToast("CPUs actualizadas");
         });
 
         jPanel1.setBackground(new java.awt.Color(255, 255, 255));
@@ -1927,7 +1940,6 @@ public class Interfaz extends javax.swing.JPanel {
 
             if (!java.nio.file.Files.exists(ruta)) {
                 inicializarSistema(DEFAULT_MEMORIA, DEFAULT_VIRTUAL, DEFAULT_DISCO);
-                imprimirTerminal("Configuracion por defecto cargada.");
                 return;
             }
 
@@ -1951,10 +1963,10 @@ public class Interfaz extends javax.swing.JPanel {
                     partitionSizes
             );
 
-            imprimirTerminal("Configuracion inicial cargada desde Ajuste.json.");
         } catch (Exception e) {
             inicializarSistema(DEFAULT_MEMORIA, DEFAULT_VIRTUAL, DEFAULT_DISCO);
             imprimirTerminal("No se pudo leer Ajuste.json. Usando configuracion por defecto.");
+            mostrarToast("Configuracion por defecto aplicada");
         }
     }
 
@@ -2068,6 +2080,7 @@ public class Interfaz extends javax.swing.JPanel {
                 + " | Disco: " + sizeDisco
                 + " | Estrategia: " + strategy
                 + " | CPUs: " + cantidadCpus);
+        mostrarToast("Sistema listo");
 
         if ("Pagination".equals(strategy)) {
             imprimirTerminal("Paginación activada. Tamaño de página: " + pageSize);
@@ -2473,11 +2486,6 @@ public class Interfaz extends javax.swing.JPanel {
             cpuActual.CargarBcp(bcp);
             memoria.actualizarBCPPorId(cpuActual.getBcp());
             dispatcher.actualizarBCP(cpuActual.getBcp());
-
-            final int cpuIndex = i;
-            final String proceso = bcp.getIdProceso();
-            javax.swing.SwingUtilities.invokeLater(() ->
-                    imprimirTerminal("CPU " + cpuIndex + " ejecutando " + proceso));
         }
     }
 
@@ -2573,13 +2581,6 @@ public class Interfaz extends javax.swing.JPanel {
             cpuActual.CargarBcp(candidato);
             memoria.actualizarBCPPorId(cpuActual.getBcp());
             dispatcher.actualizarBCP(cpuActual.getBcp());
-
-            final int cpuIndex = i;
-            final String procesoEntra = candidato.getIdProceso();
-            final String procesoSale = procesoActual.getIdProceso();
-            javax.swing.SwingUtilities.invokeLater(() ->
-                    imprimirTerminal("CPU " + cpuIndex + " SRT cambia "
-                            + procesoSale + " por " + procesoEntra));
         }
     }
 
@@ -2659,10 +2660,6 @@ public class Interfaz extends javax.swing.JPanel {
                         current.setCpuAsignado(-1);
                         memoria.actualizarBCPPorId(current);
                         dispatcher.actualizarBCP(current);
-                        final int cpuIndex = i;
-                        final String proc = current.getIdProceso();
-                        javax.swing.SwingUtilities.invokeLater(() ->
-                                imprimirTerminal("CPU " + cpuIndex + " quantum expiró para " + proc));
 
                         cpuActual.liberarBcp();
                     }
@@ -2755,8 +2752,10 @@ public class Interfaz extends javax.swing.JPanel {
                     });
                 }
 
-                javax.swing.SwingUtilities.invokeLater(() ->
-                        imprimirTerminal("Todos los procesos finalizados."));
+                javax.swing.SwingUtilities.invokeLater(() -> {
+                    imprimirTerminal("Todos los procesos finalizados.");
+                    mostrarToast("Ejecucion finalizada");
+                });
                 return null;
             }
         };
@@ -2786,6 +2785,7 @@ public class Interfaz extends javax.swing.JPanel {
         limpiarBCP();
         terminalInput.setEnabled(false);
         btnEnviar.setEnabled(false);
+        cargarConfiguracionInicial();
     }//GEN-LAST:event_btnLimpiarActionPerformed
 
     private void btnPasoPasoActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_btnPasoPasoActionPerformed
@@ -2796,6 +2796,7 @@ public class Interfaz extends javax.swing.JPanel {
 
             if (memoria.vacio() && !hayCpuActiva()) {
                 imprimirTerminal("No hay procesos en cola.");
+                mostrarToast("No hay procesos para ejecutar");
                 return;
             }
 
@@ -2806,6 +2807,7 @@ public class Interfaz extends javax.swing.JPanel {
 
                 if (!hayCpuActiva()) {
                     imprimirTerminal("Todos los procesos finalizados.");
+                    mostrarToast("Ejecucion finalizada");
                 } else {
                     ejecutarCicloDosCPUs();
                     finalizarProcesosTerminados();
@@ -2819,13 +2821,18 @@ public class Interfaz extends javax.swing.JPanel {
 
             } catch (Exception e) {
                 imprimirTerminal("Error en paso a paso: " + e.getMessage());
+                mostrarToast("Error en paso a paso");
             }
 
             return;
         }
 
         if (!validarSistema()) return;
-        if (memoria.vacio()) { imprimirTerminal("No hay procesos en cola."); return; }
+        if (memoria.vacio()) {
+            imprimirTerminal("No hay procesos en cola.");
+            mostrarToast("No hay procesos para ejecutar");
+            return;
+        }
 
         BCP bcp = memoria.obtenerPrimerBCP();
         if (bcp == null) return;
@@ -2841,16 +2848,19 @@ public class Interfaz extends javax.swing.JPanel {
         if (cpu.isInterrupcion()) {
             if (cpu.getTipoInterrupcion().equals("09H")) {
                 imprimirTerminal("Esperando entrada de teclado...");
+                mostrarToast("Entrada requerida");
                 activarEntrada();
             } else {
-                imprimirTerminal("CPU en espera de interrupción.");
+                imprimirTerminal("Proceso en espera.");
+                mostrarToast("Proceso en espera");
             }
             return;
         }
 
         if (cpu.isProcesoFinalizado()) {
             dispatcher.Mover(memoria, disco);
-            imprimirTerminal("Proceso finalizado. Dispatcher ejecutado.");
+            imprimirTerminal("Proceso finalizado.");
+            mostrarToast("Proceso finalizado");
 
             actualizarBCP();
             actualizarTablaProcesos();
@@ -2899,6 +2909,7 @@ public class Interfaz extends javax.swing.JPanel {
             // Si cancela usa valores por defecto.
             inicializarSistema(DEFAULT_MEMORIA, DEFAULT_VIRTUAL, DEFAULT_DISCO);
             imprimirTerminal("Usando valores por defecto.");
+            mostrarToast("Configuracion por defecto aplicada");
             return;
         }
 
@@ -2927,10 +2938,12 @@ public class Interfaz extends javax.swing.JPanel {
             );
 
             imprimirTerminal("Configuración cargada: " + archivo.getName());
+            mostrarToast("Configuracion aplicada");
 
         } catch (Exception e) {
             inicializarSistema(DEFAULT_MEMORIA, DEFAULT_VIRTUAL, DEFAULT_DISCO);
             imprimirTerminal("Error al leer JSON, usando valores por defecto.");
+            mostrarToast("Configuracion por defecto aplicada");
         }
     }//GEN-LAST:event_btnCargarConfigActionPerformed
 
@@ -2972,6 +2985,7 @@ public class Interfaz extends javax.swing.JPanel {
 
         if (procesosBasePlanificacion.isEmpty()) {
             imprimirTerminal("No hay procesos base para planificar. Cargue archivos primero.");
+            mostrarToast("Cargue archivos primero");
             return;
         }
 
@@ -3006,7 +3020,6 @@ public class Interfaz extends javax.swing.JPanel {
                     memoria.agregarBCP(bcp);
                 }
 
-                imprimirTerminal("Proceso cargado: " + bcp.getIdProceso());
                 cargados++;
             }
         }
@@ -3020,6 +3033,7 @@ public class Interfaz extends javax.swing.JPanel {
         }
 
         imprimirTerminal("Archivos cargados: " + cargados + "/" + archivos.length);
+        mostrarToast(cargados + " archivo(s) cargado(s)");
 
     }//GEN-LAST:event_btnCargarArchivosActionPerformed
 
@@ -3028,14 +3042,15 @@ public class Interfaz extends javax.swing.JPanel {
             int valor = Integer.parseInt(terminalInput.getText().trim());
             if (valor < 0 || valor > 255) {
                 imprimirTerminal("ERROR: valor fuera de rango (0-255)");
+                mostrarToast("Entrada fuera de rango");
                 return;
             }
-            imprimirTerminal("Valor ingresado: " + valor);
             cpu.recibirEntradaTeclado(valor);
             desactivarEntrada();
             actualizarBCP();
         } catch (NumberFormatException e) {
             imprimirTerminal("ERROR: ingrese un número válido (0-255)");
+            mostrarToast("Entrada invalida");
         }
     }//GEN-LAST:event_btnEnviarActionPerformed
 

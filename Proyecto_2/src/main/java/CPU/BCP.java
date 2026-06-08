@@ -18,6 +18,7 @@ public class BCP {
     private int base;
     private int limite;
     private int pc;
+    private int ultimaDireccionEjecutada;
     private String ir;  
     private int ac;   
     private int ax;
@@ -69,6 +70,7 @@ public class BCP {
         this.base = base;
         this.limite = limite;
         this.pc = pc;
+        this.ultimaDireccionEjecutada = -1;
         this.prioridad = prioridad;
         this.ir = "";
         this.ac = 0;
@@ -172,6 +174,12 @@ public class BCP {
     }
     public void setPc(int pc) {
         this.pc = pc;
+    }
+    public int getUltimaDireccionEjecutada() {
+        return ultimaDireccionEjecutada;
+    }
+    public void setUltimaDireccionEjecutada(int ultimaDireccionEjecutada) {
+        this.ultimaDireccionEjecutada = ultimaDireccionEjecutada;
     }
     public void setLimite(int limite) { 
         this.limite = limite; 
