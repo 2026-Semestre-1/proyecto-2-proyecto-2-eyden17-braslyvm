@@ -26,10 +26,38 @@ public class Interfaz extends javax.swing.JPanel {
     private static final int DEFAULT_MEMORIA = 512;
     private static final int DEFAULT_VIRTUAL = 64;
     private static final int DEFAULT_DISCO   = 512;
+
+    // Estrategia por defecto. Valores aceptados:
+    // "Default", "Best_Fit", "Pagination", "Partition_Equal", "Partition_Different".
+    private static final String DEFAULT_STRATEGY = "Best_Fit";
+
+    // Para Pagination, este valor representa el tamaño de página.
+    private static final int DEFAULT_PAGE_SIZE = 4;
+
+    // Para Partition_Equal, este valor representa la cantidad de particiones.
+    private static final int DEFAULT_COUNT_PARTITIONS = 4;
+
+    // Para Partition_Different, este arreglo representa el patrón de particiones.
+    private static final int[] DEFAULT_PARTITION_SIZES = {20, 30, 50};
     
     private static final int TAMANO_BCP = 30;
     private static final java.awt.Color COLOR_EJECUCION = new java.awt.Color(255, 249, 196);
     private static final java.awt.Color COLOR_INSTRUCCION = new java.awt.Color(255, 236, 179);
+
+    // Colores para visualizar marcos, particiones y bloques.
+    // Se usan colores un poco más fuertes para que se noten en la tabla.
+    private static final java.awt.Color[] COLORES_BLOQUES = {
+        new java.awt.Color(200, 230, 201),
+        new java.awt.Color(187, 222, 251),
+        new java.awt.Color(255, 224, 178),
+        new java.awt.Color(225, 190, 231),
+        new java.awt.Color(178, 235, 242),
+        new java.awt.Color(255, 205, 210),
+        new java.awt.Color(220, 237, 200),
+        new java.awt.Color(209, 196, 233)
+    };
+
+    private static final java.awt.Color COLOR_HUECO_LIBRE = new java.awt.Color(224, 224, 224);
     private static final int TIEMPO_ESPERA_MS = 750;
     private int tiempoGlobal = 0;
 
@@ -54,9 +82,27 @@ public class Interfaz extends javax.swing.JPanel {
      * Aplica los coloresde los procesos que estan en ejecución a las tablas de la interfaz.
      */
     private void aplicarRenderersDeEjecucion() {
-        tablaMemoria.setDefaultRenderer(Object.class, new MemoriaRenderer());
-        tablaProcesos.setDefaultRenderer(Object.class, new ProcesosRenderer());
-        tablaDisco.setDefaultRenderer(Object.class, new DiscoRenderer());
+        MemoriaRenderer memoriaRenderer = new MemoriaRenderer();
+        MemoriaVirtualRenderer memoriaVirtualRenderer = new MemoriaVirtualRenderer();
+        ProcesosRenderer procesosRenderer = new ProcesosRenderer();
+        DiscoRenderer discoRenderer = new DiscoRenderer();
+
+        // Se asigna a Object, String e Integer para evitar que JTable use
+        // renderers por defecto según el tipo de dato de la columna.
+        tablaMemoria.setDefaultRenderer(Object.class, memoriaRenderer);
+        tablaMemoria.setDefaultRenderer(String.class, memoriaRenderer);
+        tablaMemoria.setDefaultRenderer(Integer.class, memoriaRenderer);
+
+        tablaMemoriaVirtual.setDefaultRenderer(Object.class, memoriaVirtualRenderer);
+        tablaMemoriaVirtual.setDefaultRenderer(String.class, memoriaVirtualRenderer);
+        tablaMemoriaVirtual.setDefaultRenderer(Integer.class, memoriaVirtualRenderer);
+
+        tablaProcesos.setDefaultRenderer(Object.class, procesosRenderer);
+        tablaProcesos.setDefaultRenderer(String.class, procesosRenderer);
+
+        tablaDisco.setDefaultRenderer(Object.class, discoRenderer);
+        tablaDisco.setDefaultRenderer(String.class, discoRenderer);
+        tablaDisco.setDefaultRenderer(Integer.class, discoRenderer);
     }
     
     /**
@@ -307,28 +353,42 @@ public class Interfaz extends javax.swing.JPanel {
 
     public void actualizarTablaMemoria() {
         if (memoria == null) return;
+
         javax.swing.table.DefaultTableModel model =
                 (javax.swing.table.DefaultTableModel) tablaMemoria.getModel();
         model.setRowCount(0);
+
         String[] mem = memoria.getMemoria();
-        int hasta = Math.max(memoria.getPunteroSO(), memoria.getPunteroUsuario());
-        for (int i = 0; i < hasta; i++) {
+
+        // Se recorre toda la memoria porque con Best Fit, particiones o paginación
+        // el punteroUsuario puede no representar hasta dónde hay datos cargados.
+        for (int i = 0; i < mem.length; i++) {
             String val = (mem[i] != null && !mem[i].isEmpty()) ? mem[i] : "";
             model.addRow(new Object[]{i, val});
         }
+
+        tablaMemoria.revalidate();
         tablaMemoria.repaint();
     }
 
     public void actualizarTablaVirtual() {
         if (disco == null) return;
+
         javax.swing.table.DefaultTableModel model =
                 (javax.swing.table.DefaultTableModel) tablaMemoriaVirtual.getModel();
         model.setRowCount(0);
+
         String[] mem = disco.getMemoriaVirtual();
-        for (int i = 0; i < disco.getPunteroVirtual(); i++) {
+
+        // Se recorre toda la memoria virtual porque en paginación se escribe
+        // por marcos virtuales y no necesariamente se mueve el punteroVirtual.
+        for (int i = 0; i < mem.length; i++) {
             String val = (mem[i] != null && !mem[i].isEmpty()) ? mem[i] : "";
             model.addRow(new Object[]{i, val});
         }
+
+        tablaMemoriaVirtual.revalidate();
+        tablaMemoriaVirtual.repaint();
     }
 
     public void actualizarTablaDisco() {
@@ -393,7 +453,163 @@ public class Interfaz extends javax.swing.JPanel {
             return c;
         }
     }
-        private class MemoriaRenderer extends javax.swing.table.DefaultTableCellRenderer {
+
+    /**
+     * Retorna el color del bloque de memoria física según la estrategia activa.
+     *
+     * Pagination:
+     *      Pinta por marcos físicos de tamaño pageSize.
+     *
+     * Partition_Equal / Partition_Different:
+     *      Pinta por particiones.
+     *
+     * Best_Fit / Default:
+     *      No pinta bloques especiales.
+     */
+    private java.awt.Color obtenerColorBloqueMemoriaFisica(int posicion) {
+        if (memoria == null) {
+            return null;
+        }
+
+        String strategy = memoria.getStrategy();
+
+        if (strategy == null) {
+            return null;
+        }
+
+        int inicioUsuario = memoria.getInicioUsuario();
+
+        // No pintar zona del SO / BCP con bloques de usuario.
+        if (posicion < inicioUsuario) {
+            return null;
+        }
+
+        // ==============================
+        // Paginación: pintar por marcos físicos.
+        // ==============================
+        if ("Pagination".equals(strategy) && memoria.getPagination_Strategy() != null) {
+            int pageSize = memoria.getPagination_Strategy().getPageSize();
+
+            if (pageSize <= 0) {
+                return null;
+            }
+
+            int frame = (posicion - inicioUsuario) / pageSize;
+            return COLORES_BLOQUES[frame % COLORES_BLOQUES.length];
+        }
+
+        // ==============================
+        // Partición fija: pintar por particiones.
+        // ==============================
+        if (("Partition_Equal".equals(strategy) || "Partition_Different".equals(strategy))
+                && memoria.getPartitio_Strategy() != null) {
+
+            int[] starts = memoria.getPartitio_Strategy().getStart();
+            int[] sizes = memoria.getPartitio_Strategy().getSize();
+
+            for (int i = 0; i < starts.length; i++) {
+                int start = starts[i];
+                int end = start + sizes[i];
+
+                if (posicion >= start && posicion < end) {
+                    return COLORES_BLOQUES[i % COLORES_BLOQUES.length];
+                }
+            }
+        }
+
+        // ==============================
+        // Best Fit: pintar bloques ocupados y huecos.
+        // ==============================
+        if ("Best_Fit".equals(strategy) && memoria.getBestFit_Strategy() != null) {
+
+            int[] occupiedStart = memoria.getBestFit_Strategy().getOccupiedStart();
+            int[] occupiedEnd = memoria.getBestFit_Strategy().getOccupiedEnd();
+            int occupiedCount = memoria.getBestFit_Strategy().getOccupiedCount();
+
+            // Caso correcto: BestFit sí registró los bloques ocupados.
+            for (int i = 0; i < occupiedCount; i++) {
+                int start = occupiedStart[i];
+                int end = occupiedEnd[i];
+
+                if (posicion >= start && posicion < end) {
+                    return COLORES_BLOQUES[i % COLORES_BLOQUES.length];
+                }
+            }
+
+            // Respaldo visual:
+            // Si occupiedCount está en 0, normalmente significa que Parser todavía
+            // está cargando instrucciones con cargarInstruccionesSiCabe() y no con
+            // memoria.asignarProceso(). Aun así, pintamos usando las bases/límites
+            // guardados en los BCP para que la interfaz muestre los procesos.
+            if (occupiedCount == 0) {
+                java.util.List<BCP> bcps = memoria.obtenerTodosBCPsEnMemoria();
+
+                for (int i = 0; i < bcps.size(); i++) {
+                    BCP bcp = bcps.get(i);
+
+                    if (bcp == null) {
+                        continue;
+                    }
+
+                    int base = bcp.getBase();
+                    int limite = bcp.getLimite();
+
+                    if (base >= inicioUsuario && limite >= base
+                            && posicion >= base && posicion <= limite) {
+                        return COLORES_BLOQUES[i % COLORES_BLOQUES.length];
+                    }
+                }
+            }
+
+            int[] holeStart = memoria.getBestFit_Strategy().getHoleStart();
+            int[] holeEnd = memoria.getBestFit_Strategy().getHoleEnd();
+            int holeCount = memoria.getBestFit_Strategy().getHoleCount();
+
+            // Huecos libres en gris.
+            for (int i = 0; i < holeCount; i++) {
+                int start = holeStart[i];
+                int end = holeEnd[i];
+
+                if (posicion >= start && posicion < end) {
+                    return COLOR_HUECO_LIBRE;
+                }
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * Retorna el color del bloque de memoria virtual.
+     *
+     * Solo se pinta cuando la estrategia es Pagination, porque ahí la
+     * memoria virtual también se divide en marcos virtuales del tamaño pageSize.
+     */
+    private java.awt.Color obtenerColorBloqueMemoriaVirtual(int posicion) {
+        if (memoria == null) {
+            return null;
+        }
+
+        if (!"Pagination".equals(memoria.getStrategy())) {
+            return null;
+        }
+
+        if (memoria.getPagination_Strategy() == null) {
+            return null;
+        }
+
+        int pageSize = memoria.getPagination_Strategy().getPageSize();
+
+        if (pageSize <= 0) {
+            return null;
+        }
+
+        int virtualFrame = posicion / pageSize;
+
+        return COLORES_BLOQUES[virtualFrame % COLORES_BLOQUES.length];
+    }
+
+    private class MemoriaRenderer extends javax.swing.table.DefaultTableCellRenderer {
         @Override
         public java.awt.Component getTableCellRendererComponent(
                 javax.swing.JTable table,
@@ -407,23 +623,76 @@ public class Interfaz extends javax.swing.JPanel {
                     table, value, isSelected, hasFocus, row, column
             );
 
+            int posicion = -1;
+
+            try {
+                posicion = Integer.parseInt(String.valueOf(table.getValueAt(row, 0)));
+            } catch (NumberFormatException e) {
+                posicion = -1;
+            }
+
             if (!isSelected) {
-                c.setBackground(row % 2 == 0 ? java.awt.Color.WHITE : new java.awt.Color(246, 248, 251));
+                java.awt.Color colorBloque = obtenerColorBloqueMemoriaFisica(posicion);
 
-                int posicion = -1;
-
-                try {
-                    posicion = Integer.parseInt(String.valueOf(table.getValueAt(row, 0)));
-                } catch (NumberFormatException e) {
-                    posicion = -1;
+                if (colorBloque != null) {
+                    c.setBackground(colorBloque);
+                } else {
+                    c.setBackground(row % 2 == 0
+                            ? java.awt.Color.WHITE
+                            : new java.awt.Color(246, 248, 251));
                 }
 
+                // Resalta el BCP actual encima del color de partición/marco.
                 if (esFilaBCPActualEnMemoria(posicion)) {
                     c.setBackground(COLOR_EJECUCION);
                 }
 
-                if (cpu != null && cpu.getBcp() != null && posicion == cpu.getBcp().getPc()) {
+                // Resalta la instrucción actual encima de todo.
+                // En paginación el PC es lógico, por eso no se compara con posición física.
+                if (cpu != null
+                        && cpu.getBcp() != null
+                        && !"Pagination".equals(memoria != null ? memoria.getStrategy() : "")
+                        && posicion == cpu.getBcp().getPc()) {
                     c.setBackground(COLOR_INSTRUCCION);
+                }
+            }
+
+            setBorder(javax.swing.BorderFactory.createEmptyBorder(0, 8, 0, 8));
+            return c;
+        }
+    }
+
+    private class MemoriaVirtualRenderer extends javax.swing.table.DefaultTableCellRenderer {
+        @Override
+        public java.awt.Component getTableCellRendererComponent(
+                javax.swing.JTable table,
+                Object value,
+                boolean isSelected,
+                boolean hasFocus,
+                int row,
+                int column) {
+
+            java.awt.Component c = super.getTableCellRendererComponent(
+                    table, value, isSelected, hasFocus, row, column
+            );
+
+            int posicion = -1;
+
+            try {
+                posicion = Integer.parseInt(String.valueOf(table.getValueAt(row, 0)));
+            } catch (NumberFormatException e) {
+                posicion = -1;
+            }
+
+            if (!isSelected) {
+                java.awt.Color colorBloque = obtenerColorBloqueMemoriaVirtual(posicion);
+
+                if (colorBloque != null) {
+                    c.setBackground(colorBloque);
+                } else {
+                    c.setBackground(row % 2 == 0
+                            ? java.awt.Color.WHITE
+                            : new java.awt.Color(246, 248, 251));
                 }
             }
 
@@ -1094,9 +1363,72 @@ public class Interfaz extends javax.swing.JPanel {
         }
         return true;
     }
+    /**
+     * Inicializa el sistema usando la configuración básica por defecto.
+     * Se mantiene para no tener que cambiar todas las llamadas existentes.
+     */
     private void inicializarSistema(int sizeMemoria, int sizeVirtual, int sizeDisco) {
-        memoria    = new Memoria(sizeMemoria);
-        disco      = new Disco(sizeVirtual, sizeDisco);
+        inicializarSistema(
+                sizeMemoria,
+                sizeVirtual,
+                sizeDisco,
+                DEFAULT_STRATEGY,
+                DEFAULT_PAGE_SIZE,
+                DEFAULT_COUNT_PARTITIONS,
+                DEFAULT_PARTITION_SIZES
+        );
+    }
+
+    /**
+     * Inicializa el sistema con estrategia de memoria.
+     *
+     * Orden correcto:
+     * 1. Crear Disco.
+     * 2. Crear Memoria con Strategy y Disco.
+     * 3. Crear la estrategia interna de memoria.
+     * 4. Crear CPU, Dispatcher y Parser.
+     */
+    private void inicializarSistema(
+            int sizeMemoria,
+            int sizeVirtual,
+            int sizeDisco,
+            String strategy,
+            int pageSize,
+            int countPartitions,
+            int[] partitionSizes
+    ) {
+        strategy = normalizarStrategy(strategy);
+
+        // Primero se crea Disco porque Pagination necesita usar memoria virtual.
+        disco = new Disco(sizeVirtual, sizeDisco);
+
+        // Luego se crea Memoria con la estrategia y el disco.
+        memoria = new Memoria(sizeMemoria, strategy, disco);
+
+        // Crear la estrategia concreta.
+        switch (strategy) {
+            case "Pagination":
+                memoria.Creation_Strategy(pageSize, null);
+                break;
+
+            case "Partition_Equal":
+                memoria.Creation_Strategy(countPartitions, null);
+                break;
+
+            case "Partition_Different":
+                memoria.Creation_Strategy(0, partitionSizes);
+                break;
+
+            case "Best_Fit":
+                memoria.Creation_Strategy(0, null);
+                break;
+
+            case "Default":
+            default:
+                memoria.Creation_Strategy(0, null);
+                break;
+        }
+
         cpu        = new CPU(memoria, disco);
         dispatcher = new Dispatcher();
         parser     = new Parser();
@@ -1104,7 +1436,7 @@ public class Interfaz extends javax.swing.JPanel {
 
         terminalInput.setEnabled(false);
         btnEnviar.setEnabled(false);
-        
+
         tiempoGlobal = 0;
 
         limpiarTabla(tablaMemoria);
@@ -1113,22 +1445,113 @@ public class Interfaz extends javax.swing.JPanel {
         limpiarTabla(tablaProcesos);
 
         imprimirTerminal("Sistema iniciado. Memoria: " + sizeMemoria
-                + " | Virtual: " + sizeVirtual + " | Disco: " + sizeDisco);
+                + " | Virtual: " + sizeVirtual
+                + " | Disco: " + sizeDisco
+                + " | Estrategia: " + strategy);
+
+        if ("Pagination".equals(strategy)) {
+            imprimirTerminal("Paginación activada. Tamaño de página: " + pageSize);
+        } else if ("Partition_Equal".equals(strategy)) {
+            imprimirTerminal("Partición fija igual activada. Particiones: " + countPartitions);
+        } else if ("Partition_Different".equals(strategy)) {
+            imprimirTerminal("Partición fija diferente activada.");
+        } else if ("Best_Fit".equals(strategy)) {
+            imprimirTerminal("Best Fit activado.");
+        }
+    }
+
+    private String normalizarStrategy(String strategy) {
+        if (strategy == null || strategy.isBlank()) {
+            return DEFAULT_STRATEGY;
+        }
+
+        String value = strategy.trim();
+
+        if (value.equalsIgnoreCase("Default")) return "Default";
+        if (value.equalsIgnoreCase("Best_Fit") || value.equalsIgnoreCase("BestFit")) return "Best_Fit";
+        if (value.equalsIgnoreCase("Pagination") || value.equalsIgnoreCase("Paginacion")) return "Pagination";
+        if (value.equalsIgnoreCase("Partition_Equal")) return "Partition_Equal";
+        if (value.equalsIgnoreCase("Partition_Different")) return "Partition_Different";
+
+        return DEFAULT_STRATEGY;
     }
  
-     private int extraerValorJSON(String json, String clave, int valorDefecto) {
+    private int extraerValorJSON(String json, String clave, int valorDefecto) {
         try {
             String buscar = "\"" + clave + "\"";
             int idx = json.indexOf(buscar);
             if (idx == -1) return valorDefecto;
+
             int dosPuntos = json.indexOf(":", idx);
             int inicio = dosPuntos + 1;
             int fin = inicio;
+
             while (fin < json.length() &&
-                    (Character.isDigit(json.charAt(fin)) || json.charAt(fin) == ' ')) {
+                    (Character.isDigit(json.charAt(fin)) || json.charAt(fin) == ' ' || json.charAt(fin) == '-')) {
                 fin++;
             }
+
             return Integer.parseInt(json.substring(inicio, fin).trim());
+        } catch (Exception e) {
+            return valorDefecto;
+        }
+    }
+
+    private String extraerTextoJSON(String json, String clave, String valorDefecto) {
+        try {
+            String buscar = "\"" + clave + "\"";
+            int idx = json.indexOf(buscar);
+
+            if (idx == -1) {
+                return valorDefecto;
+            }
+
+            int dosPuntos = json.indexOf(":", idx);
+            int primeraComilla = json.indexOf("\"", dosPuntos + 1);
+            int segundaComilla = json.indexOf("\"", primeraComilla + 1);
+
+            if (primeraComilla == -1 || segundaComilla == -1) {
+                return valorDefecto;
+            }
+
+            return json.substring(primeraComilla + 1, segundaComilla).trim();
+
+        } catch (Exception e) {
+            return valorDefecto;
+        }
+    }
+
+    private int[] extraerArregloJSON(String json, String clave, int[] valorDefecto) {
+        try {
+            String buscar = "\"" + clave + "\"";
+            int idx = json.indexOf(buscar);
+
+            if (idx == -1) {
+                return valorDefecto;
+            }
+
+            int inicioCorchete = json.indexOf("[", idx);
+            int finCorchete = json.indexOf("]", inicioCorchete);
+
+            if (inicioCorchete == -1 || finCorchete == -1) {
+                return valorDefecto;
+            }
+
+            String contenido = json.substring(inicioCorchete + 1, finCorchete).trim();
+
+            if (contenido.isEmpty()) {
+                return valorDefecto;
+            }
+
+            String[] partes = contenido.split(",");
+            int[] resultado = new int[partes.length];
+
+            for (int i = 0; i < partes.length; i++) {
+                resultado[i] = Integer.parseInt(partes[i].trim());
+            }
+
+            return resultado;
+
         } catch (Exception e) {
             return valorDefecto;
         }
@@ -1305,21 +1728,40 @@ public class Interfaz extends javax.swing.JPanel {
         fc.setFileFilter(new javax.swing.filechooser.FileNameExtensionFilter("JSON", "json"));
 
         int resultado = fc.showOpenDialog(this);
+
         if (resultado != javax.swing.JFileChooser.APPROVE_OPTION) {
-            // Si cancela usa valores por defecto
+            // Si cancela usa valores por defecto.
             inicializarSistema(DEFAULT_MEMORIA, DEFAULT_VIRTUAL, DEFAULT_DISCO);
             imprimirTerminal("Usando valores por defecto.");
             return;
         }
 
         java.io.File archivo = fc.getSelectedFile();
+
         try {
             String contenido = new String(java.nio.file.Files.readAllBytes(archivo.toPath()));
-            int sizeMemoria = extraerValorJSON(contenido, "size_memoria",    DEFAULT_MEMORIA);
+
+            int sizeMemoria = extraerValorJSON(contenido, "size_memoria", DEFAULT_MEMORIA);
             int sizeVirtual = extraerValorJSON(contenido, "size_memoriavirtual", DEFAULT_VIRTUAL);
-            int sizeDisco   = extraerValorJSON(contenido, "size_disco",      DEFAULT_DISCO);
-            inicializarSistema(sizeMemoria, sizeVirtual, sizeDisco);
+            int sizeDisco   = extraerValorJSON(contenido, "size_disco", DEFAULT_DISCO);
+
+            String strategy = extraerTextoJSON(contenido, "strategy", DEFAULT_STRATEGY);
+            int pageSize = extraerValorJSON(contenido, "page_size", DEFAULT_PAGE_SIZE);
+            int countPartitions = extraerValorJSON(contenido, "count_partitions", DEFAULT_COUNT_PARTITIONS);
+            int[] partitionSizes = extraerArregloJSON(contenido, "partition_sizes", DEFAULT_PARTITION_SIZES);
+
+            inicializarSistema(
+                    sizeMemoria,
+                    sizeVirtual,
+                    sizeDisco,
+                    strategy,
+                    pageSize,
+                    countPartitions,
+                    partitionSizes
+            );
+
             imprimirTerminal("Configuración cargada: " + archivo.getName());
+
         } catch (Exception e) {
             inicializarSistema(DEFAULT_MEMORIA, DEFAULT_VIRTUAL, DEFAULT_DISCO);
             imprimirTerminal("Error al leer JSON, usando valores por defecto.");

@@ -169,6 +169,21 @@ public class Partition {
 
         return false;
     }
+    public int[] getStart() {
+        return start;
+    }
+
+    public int[] getSize() {
+        return size;
+    }
+
+    public boolean[] getFree_partition() {
+        return free_partition;
+    }
+
+    public String[] getProcesoParticiones() {
+        return procesoParticiones;
+    }
 
     
     

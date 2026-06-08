@@ -1,5 +1,7 @@
 {
-  "size_memoria": 700,
+  "size_memoria": 512,
   "size_memoriavirtual": 64,
-  "size_disco": 512
+  "size_disco": 512,
+  "strategy": "Pagination",
+  "page_size": 4
 }

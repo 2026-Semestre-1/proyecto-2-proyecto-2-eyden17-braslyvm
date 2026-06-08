@@ -263,5 +263,36 @@ public class BestFit {
             }
         }
     }
+        public int[] getHoleStart() {
+        return holeStart;
+    }
+
+    public int[] getHoleEnd() {
+        return holeEnd;
+    }
+
+    public int getHoleCount() {
+        return holeCount;
+    }
+
+    public int[] getOccupiedStart() {
+        return occupiedStart;
+    }
+
+    public int[] getOccupiedEnd() {
+        return occupiedEnd;
+    }
+
+    public String[] getOccupiedProcess() {
+        return occupiedProcess;
+    }
+
+    public BCP[] getOccupiedBCP() {
+        return occupiedBCP;
+    }
+
+    public int getOccupiedCount() {
+        return occupiedCount;
+    }
     
 }
