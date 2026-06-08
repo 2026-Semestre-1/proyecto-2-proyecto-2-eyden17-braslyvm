@@ -81,6 +81,20 @@ public class Dispatcher {
         }
     }
 
+    public void MoverProceso(BCP actual, Memoria memoria, Disco disco) {
+        if (actual == null || memoria == null || disco == null) {
+            return;
+        }
+
+        if (actual.getEstado().equalsIgnoreCase("finalizado")) {
+            actualizarBCP(actual);
+            memoria.liberarProceso(actual);
+            memoria.eliminarBCPPorId(actual.getIdProceso());
+            actualizarBCPsDeMemoriaEnDispatcher(memoria);
+            cargarDesdeMemoriaVirtual(memoria, disco);
+        }
+    }
+
     /**
      * Carga procesos desde memoria virtual a memoria principal, actualizando los BCPs correspondientes y eliminando los procesos de memoria virtual una vez que han sido cargados. Se llama cada vez que se agrega un nuevo proceso a la cola del dispatcher para intentar subirlo a memoria principal lo antes posible.
      * @param disco
@@ -131,7 +145,11 @@ public class Dispatcher {
                 bcp.setIr("");
             }
 
-            memoria.agregarBCP(bcp);
+            if (memoria.obtenerBCPPorId(bcp.getIdProceso()) != null) {
+                memoria.actualizarBCPPorId(bcp);
+            } else {
+                memoria.agregarBCP(bcp);
+            }
             actualizarBCP(bcp);
             disco.eliminarProcesoVirtual(indice);
             cargoAlMenosUno = true;

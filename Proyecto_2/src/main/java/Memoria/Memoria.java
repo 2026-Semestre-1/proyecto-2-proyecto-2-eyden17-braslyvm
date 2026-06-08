@@ -20,7 +20,7 @@ public class Memoria {
     private int tamaño;
     private static final int inicio_SO = 0;
     private static final int limite_SO = 149;
-    private static final int tamaño_BCP = 30;
+    private static final int tamano_BCP = 30;
     private static final int n_Procesos = 5;
 
     private int punteroSO;
@@ -66,9 +66,9 @@ public class Memoria {
             memoria[campoSiguienteAnterior] = bcp.getIdProceso();
         }
         guardarBCP(bcp, punteroSO);
-        memoria[punteroSO + tamaño_BCP - 1] = "null";
+        memoria[punteroSO + tamano_BCP - 1] = "null";
 
-        punteroSO += tamaño_BCP;
+        punteroSO += tamano_BCP;
         return true;
     }
 
@@ -76,19 +76,19 @@ public class Memoria {
      * Elimina el primer BCP de la memoria del sistema.
      */
     public void eliminarPrimerBCP() {
-        int cantidadBCPs = punteroSO / tamaño_BCP;
+        int cantidadBCPs = punteroSO / tamano_BCP;
         for (int bcp = 1; bcp < cantidadBCPs; bcp++) {
-            int origenBloque = inicio_SO + (bcp * tamaño_BCP);
-            int destinoBloque = inicio_SO + ((bcp - 1) * tamaño_BCP);
-            for (int campo = 0; campo < tamaño_BCP; campo++) {
+            int origenBloque = inicio_SO + (bcp * tamano_BCP);
+            int destinoBloque = inicio_SO + ((bcp - 1) * tamano_BCP);
+            for (int campo = 0; campo < tamano_BCP; campo++) {
                 memoria[destinoBloque + campo] = memoria[origenBloque + campo];
             }
         }
-        int inicioUltimo = punteroSO - tamaño_BCP;
+        int inicioUltimo = punteroSO - tamano_BCP;
         for (int i = inicioUltimo; i < punteroSO; i++) {
             memoria[i] = "";
         }
-        punteroSO -= tamaño_BCP;
+        punteroSO -= tamano_BCP;
         reconstruirEnlacesBCP();
     }
 
@@ -96,14 +96,14 @@ public class Memoria {
      * Reconstruye los enlaces entre los BCPs en la memoria del sistema después de eliminar el primer BCP, asegurando que el campo de enlace del último BCP apunte a "null".
      */
     private void reconstruirEnlacesBCP() {
-        int cantidadBCPs = punteroSO / tamaño_BCP;
+        int cantidadBCPs = punteroSO / tamano_BCP;
 
         for (int i = 0; i < cantidadBCPs; i++) {
-            int inicioActual = inicio_SO + (i * tamaño_BCP);
-            int campoSiguiente = inicioActual + tamaño_BCP - 1;
+            int inicioActual = inicio_SO + (i * tamano_BCP);
+            int campoSiguiente = inicioActual + tamano_BCP - 1;
 
             if (i < cantidadBCPs - 1) {
-                int inicioSiguiente = inicio_SO + ((i + 1) * tamaño_BCP);
+                int inicioSiguiente = inicio_SO + ((i + 1) * tamano_BCP);
                 memoria[campoSiguiente] = memoria[inicioSiguiente];
             } else {
                 memoria[campoSiguiente] = "null";
@@ -125,7 +125,7 @@ public class Memoria {
      * @return
      */
     public boolean lleno() {
-        return punteroSO >= inicio_SO + (n_Procesos * tamaño_BCP);
+        return punteroSO >= inicio_SO + (n_Procesos * tamano_BCP);
     }
 
     /**
@@ -138,6 +138,96 @@ public class Memoria {
 
     public void actualizarPrimerBCP(BCP bcp) {
         guardarBCP(bcp, inicio_SO);
+    }
+
+    public BCP obtenerBCPPorIndice(int indice) {
+        int cantidadBCPs = punteroSO / tamano_BCP;
+
+        if (indice < 0 || indice >= cantidadBCPs) {
+            return null;
+        }
+
+        java.util.List<BCP> bcps = obtenerTodosBCPsEnMemoria();
+        return indice < bcps.size() ? bcps.get(indice) : null;
+    }
+
+    public BCP obtenerBCPPorId(String idProceso) {
+        if (idProceso == null) {
+            return null;
+        }
+
+        for (BCP bcp : obtenerTodosBCPsEnMemoria()) {
+            if (idProceso.equals(bcp.getIdProceso())) {
+                return bcp;
+            }
+        }
+
+        return null;
+    }
+
+    public void actualizarBCPPorId(BCP bcp) {
+        if (bcp == null) {
+            return;
+        }
+
+        int indice = obtenerIndiceBCP(bcp.getIdProceso());
+
+        if (indice >= 0) {
+            guardarBCP(bcp, inicio_SO + (indice * tamano_BCP));
+            reconstruirEnlacesBCP();
+        }
+    }
+
+    public int obtenerIndiceBCP(String idProceso) {
+        if (idProceso == null) {
+            return -1;
+        }
+
+        int cantidadBCPs = punteroSO / tamano_BCP;
+
+        for (int i = 0; i < cantidadBCPs; i++) {
+            int pos = inicio_SO + (i * tamano_BCP);
+
+            if (idProceso.equals(memoria[pos])) {
+                return i;
+            }
+        }
+
+        return -1;
+    }
+
+    public void eliminarBCPPorId(String idProceso) {
+        int indice = obtenerIndiceBCP(idProceso);
+
+        if (indice >= 0) {
+            eliminarBCPPorIndice(indice);
+        }
+    }
+
+    public void eliminarBCPPorIndice(int indice) {
+        int cantidadBCPs = punteroSO / tamano_BCP;
+
+        if (indice < 0 || indice >= cantidadBCPs) {
+            return;
+        }
+
+        for (int bcp = indice + 1; bcp < cantidadBCPs; bcp++) {
+            int origenBloque = inicio_SO + (bcp * tamano_BCP);
+            int destinoBloque = inicio_SO + ((bcp - 1) * tamano_BCP);
+
+            for (int campo = 0; campo < tamano_BCP; campo++) {
+                memoria[destinoBloque + campo] = memoria[origenBloque + campo];
+            }
+        }
+
+        int inicioUltimo = punteroSO - tamano_BCP;
+
+        for (int i = inicioUltimo; i < punteroSO; i++) {
+            memoria[i] = "";
+        }
+
+        punteroSO -= tamano_BCP;
+        reconstruirEnlacesBCP();
     }
 
     /**
@@ -354,10 +444,10 @@ public class Memoria {
      * @param cantidadLiberada
      */
     private void actualizarDireccionesBCPDespuesDeCompactar(int baseLiberada, int cantidadLiberada) {
-        int cantidadBCPs = punteroSO / tamaño_BCP;
+        int cantidadBCPs = punteroSO / tamano_BCP;
 
         for (int i = 0; i < cantidadBCPs; i++) {
-            int pos = inicio_SO + (i * tamaño_BCP);
+            int pos = inicio_SO + (i * tamano_BCP);
 
             if (memoria[pos] == null || memoria[pos].isEmpty()) {
                 continue;
@@ -400,10 +490,10 @@ public class Memoria {
      */
     public java.util.List<BCP> obtenerTodosBCPsEnMemoria() {
         java.util.List<BCP> lista = new java.util.ArrayList<>();
-        int cantidadBCPs = punteroSO / tamaño_BCP;
+        int cantidadBCPs = punteroSO / tamano_BCP;
 
         for (int i = 0; i < cantidadBCPs; i++) {
-            int pos = inicio_SO + (i * tamaño_BCP);
+            int pos = inicio_SO + (i * tamano_BCP);
             try {
                 if (memoria[pos] == null || memoria[pos].isEmpty()) continue;
 
@@ -759,7 +849,7 @@ public class Memoria {
     }
 
     public int gettamañoBCP(){ 
-        return tamaño_BCP; 
+        return tamano_BCP; 
     }
 
     public String getStrategy() {

@@ -459,6 +459,15 @@ public class CPU {
    public boolean isProcesoFinalizado() { 
        return procesoFinalizado; 
    }
+   public boolean estaLibre() {
+       return bcp == null || procesoFinalizado;
+   }
+   public void liberarBcp() {
+       bcp = null;
+       interrupcion = false;
+       procesoFinalizado = false;
+       tipoInterrupcion = "";
+   }
    public BCP getBcp()                  { 
        return bcp; 
    }

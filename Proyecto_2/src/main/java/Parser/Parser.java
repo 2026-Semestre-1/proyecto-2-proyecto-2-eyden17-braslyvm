@@ -9,6 +9,7 @@ import java.io.IOException;
 import java.io.File;
 
 public class Parser {
+    private int siguienteIdProceso = 1;
 
     /**
      * Lee el archivo .asm, valida cada línea y carga las instrucciones en memoria.
@@ -63,13 +64,16 @@ public class Parser {
             if (!disco.guardarPrograma(archivo.getName(), arreglo)) {
                 return null;
             }
+
+            String idProceso = generarIdProceso();
+
             if (!memoria.lleno() && memoria.hayEspacioUsuario(arreglo.length)) {
                 int[] resultado = memoria.cargarInstruccionesSiCabe(arreglo);
                 int baseFinal = resultado[0];
                 int limiteFinal = resultado[1];
 
                 BCP bcp = new BCP(
-                        archivo.getName(),
+                        idProceso,
                         archivo.getName(),
                         "preparado",
                         baseFinal,
@@ -89,7 +93,7 @@ public class Parser {
             }
 
             BCP bcp = new BCP(
-                    archivo.getName(),
+                    idProceso,
                     archivo.getName(),
                     "nuevo",
                     -1,
@@ -111,6 +115,10 @@ public class Parser {
             );
             return null;
         }
+    }
+
+    private String generarIdProceso() {
+        return "P" + siguienteIdProceso++;
     }
 
     public boolean ValidarLinea(String linea) {
