@@ -57,7 +57,7 @@ public class CPU {
             return false;
         }
 
-        String instruccion = memoria.leerMemoria(pc);
+        String instruccion = memoria.leerInstruccion(bcp);
         if (instruccion == null || instruccion.trim().isEmpty()) {
             bcp.setEstado("finalizado");
             procesoFinalizado = true;

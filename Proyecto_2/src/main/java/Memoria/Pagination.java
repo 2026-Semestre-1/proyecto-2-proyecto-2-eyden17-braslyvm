@@ -52,16 +52,16 @@ public class Pagination {
     public Pagination(int userStart, int memorySize, int pageSize, Disco disco, int maxProcesses) {
         this.userStart = userStart;
         this.memorySize = memorySize;
-        this.pageSize = pageSize;
+        this.pageSize = Math.max(1, pageSize);
         this.disco = disco;
         this.maxProcesses = maxProcesses;
         this.maxPagesPerProcess = 200;
 
         int userMemorySize = memorySize - userStart;
-        this.physicalFrameCount = userMemorySize / pageSize;
+        this.physicalFrameCount = userMemorySize / this.pageSize;
 
         String[] virtualMemory = disco.getMemoriaVirtual();
-        this.virtualFrameCount = virtualMemory.length / pageSize;
+        this.virtualFrameCount = virtualMemory.length / this.pageSize;
 
         physicalFrameFree = new boolean[physicalFrameCount];
         physicalFrameProcess = new String[physicalFrameCount];
@@ -235,9 +235,19 @@ public class Pagination {
         processPageCount[processIndex] = 0;
         processInstructionCount[processIndex] = 0;
 
-        bcp.setBase(-1);
-        bcp.setLimite(-1);
-        bcp.setPc(-1);
+        // No invalidar el BCP con -1.
+        // El BCP es histórico/estado del proceso; la liberación solo limpia marcos.
+        // Si el proceso ya terminó, su PC debe conservar un valor coherente para
+        // estadísticas/interfaz, no una dirección inválida.
+        if (bcp.getBase() < 0) {
+            bcp.setBase(0);
+        }
+        if (bcp.getLimite() < 0) {
+            bcp.setLimite(Math.max(0, processInstructionCount[processIndex] - 1));
+        }
+        if (bcp.getPc() < 0) {
+            bcp.setPc(bcp.getBase());
+        }
     }
 
     /**
@@ -309,6 +319,59 @@ public class Pagination {
         int physicalAddress = userStart + (physicalFrame * pageSize) + offset;
 
         return memory[physicalAddress];
+    }
+
+
+    /**
+     * Traduce una dirección lógica del proceso a dirección física de memoria.
+     *
+     * Este método es para visualización/interfaz: no modifica el PC y no provoca
+     * page fault. Si la página no está actualmente en memoria física, retorna -1.
+     *
+     * @param bcp proceso dueño de la dirección lógica.
+     * @param logicalAddress dirección lógica dentro del proceso.
+     * @param memory memoria física.
+     * @return dirección física real, o -1 si no se puede traducir.
+     */
+    public int getPhysicalAddress(BCP bcp, int logicalAddress, String[] memory) {
+        if (bcp == null || memory == null) {
+            return -1;
+        }
+
+        int processIndex = findProcess(bcp.getIdProceso());
+
+        if (processIndex == -1) {
+            return -1;
+        }
+
+        if (logicalAddress < 0 || logicalAddress > bcp.getLimite()) {
+            return -1;
+        }
+
+        int page = logicalAddress / pageSize;
+        int offset = logicalAddress % pageSize;
+
+        if (page < 0 || page >= processPageCount[processIndex]) {
+            return -1;
+        }
+
+        if (!pageInPhysical[processIndex][page]) {
+            return -1;
+        }
+
+        int physicalFrame = pagePhysicalFrame[processIndex][page];
+
+        if (physicalFrame == -1) {
+            return -1;
+        }
+
+        int physicalAddress = userStart + (physicalFrame * pageSize) + offset;
+
+        if (physicalAddress < 0 || physicalAddress >= memory.length) {
+            return -1;
+        }
+
+        return physicalAddress;
     }
 
     /**

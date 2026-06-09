@@ -619,13 +619,11 @@ public class Interfaz extends javax.swing.JPanel {
     }
 
     private int obtenerDireccionMarcada(BCP bcp) {
-        if (bcp == null) {
+        if (bcp == null || memoria == null) {
             return -1;
         }
 
-        return bcp.getUltimaDireccionEjecutada() >= 0
-                ? bcp.getUltimaDireccionEjecutada()
-                : bcp.getPc();
+        return memoria.obtenerDireccionFisicaMarcada(bcp);
     }
 
     private String obtenerIdProcesoPorPosicionMemoria(int posicion) {

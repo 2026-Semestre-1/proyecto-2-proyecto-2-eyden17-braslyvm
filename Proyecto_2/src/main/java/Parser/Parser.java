@@ -66,44 +66,43 @@ public class Parser {
             }
 
             String idProceso = generarIdProceso();
+            BCP bcp = new BCP(
+                    idProceso,
+                    archivo.getName(),
+                    "nuevo",
+                    0,
+                    arreglo.length - 1,
+                    0,
+                    0
+            );
+            bcp.setTiempoLlegada(0);
+            bcp.setRafagaTotal(cantidadInstrucciones);
 
-            if (!memoria.lleno() && memoria.hayEspacioUsuario(arreglo.length)) {
-                int[] resultado = memoria.cargarInstruccionesSiCabe(arreglo);
-                int baseFinal = resultado[0];
-                int limiteFinal = resultado[1];
-
-                BCP bcp = new BCP(
-                        idProceso,
-                        archivo.getName(),
-                        "preparado",
-                        baseFinal,
-                        limiteFinal,
-                        baseFinal,
-                        0
-                );
-
-                bcp.setTiempoLlegada(0);
-                bcp.setRafagaTotal(cantidadInstrucciones);
+            // IMPORTANTE:
+            // No cargar con cargarInstruccionesSiCabe() porque eso ignora la estrategia.
+            // En Pagination, asignarProceso() divide en paginas/marcos y deja el PC logico.
+            if (!memoria.lleno() && memoria.hayEspacioParaProceso(arreglo)) {
+                int[] resultado = memoria.asignarProceso(bcp, arreglo);
+                if (resultado == null) {
+                    return null;
+                }
                 return bcp;
             }
 
+            // Si no hay espacio de BCP o no cabe en la estrategia activa, queda en cola virtual vieja.
+            // En Pagination normalmente no debe entrar aqui si hay marcos fisicos+virtuales disponibles,
+            // porque memoria.hayEspacioParaProceso() ya cuenta ambos tipos de marco.
             int baseVirtual = disco.cargarProcesoEnVirtual(archivo.getName(), arreglo);
             if (baseVirtual == -1) {
                 return null;
             }
 
-            BCP bcp = new BCP(
-                    idProceso,
-                    archivo.getName(),
-                    "nuevo",
-                    -1,
-                    arreglo.length,
-                    -1,
-                    0
-            );
-
-            bcp.setTiempoLlegada(0);
-            bcp.setRafagaTotal(cantidadInstrucciones);
+            bcp.setEstado("nuevo");
+            // Aunque aún esté en memoria virtual, el PC no debe ser -1.
+            // Se mantiene como dirección lógica: primera instrucción del proceso.
+            bcp.setBase(0);
+            bcp.setLimite(arreglo.length - 1);
+            bcp.setPc(0);
             return bcp;
 
         } catch (IOException e) {

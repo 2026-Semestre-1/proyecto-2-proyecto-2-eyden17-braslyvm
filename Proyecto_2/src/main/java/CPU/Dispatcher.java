@@ -126,23 +126,21 @@ public class Dispatcher {
                 return;
             }
 
-            int[] resultado = memoria.cargarInstruccionesSiCabe(instrucciones);
-            if (resultado == null) {
-                return;
-            }
-
-            int base = resultado[0];
-            int limite = resultado[1];
-
             BCP bcp = buscarBCP(nombre);
             if (bcp == null) {
-                bcp = new BCP(nombre, nombre, "preparado", base, limite, base, 0);
+                bcp = new BCP(nombre, nombre, "nuevo", 0, instrucciones.length - 1, 0, 0);
             } else {
-                bcp.setEstado("preparado");
-                bcp.setBase(base);
-                bcp.setLimite(limite);
-                bcp.setPc(base);
+                bcp.setEstado("nuevo");
+                // El BCP conserva PC lógico válido mientras espera ser reasignado.
+                bcp.setBase(0);
+                bcp.setLimite(instrucciones.length - 1);
+                bcp.setPc(0);
                 bcp.setIr("");
+            }
+
+            int[] resultado = memoria.asignarProceso(bcp, instrucciones);
+            if (resultado == null) {
+                return;
             }
 
             if (memoria.obtenerBCPPorId(bcp.getIdProceso()) != null) {

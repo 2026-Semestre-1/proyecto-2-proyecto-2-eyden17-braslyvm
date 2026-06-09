@@ -807,6 +807,56 @@ public class Memoria {
         }
     }
 
+
+    /**
+     * Obtiene la dirección física que debe marcar la interfaz para el BCP.
+     *
+     * En Pagination, el PC y ultimaDireccionEjecutada son direcciones lógicas,
+     * por eso se traducen antes de pintar la flecha en la tabla de memoria.
+     * En las demás estrategias, el PC ya es una dirección física.
+     *
+     * @param bcp proceso visible o en ejecución.
+     * @return dirección física para pintar, o -1 si no existe traducción.
+     */
+    public int obtenerDireccionFisicaMarcada(BCP bcp) {
+        if (bcp == null) {
+            return -1;
+        }
+
+        int direccionProceso = bcp.getUltimaDireccionEjecutada() >= 0
+                ? bcp.getUltimaDireccionEjecutada()
+                : bcp.getPc();
+
+        return obtenerDireccionFisica(bcp, direccionProceso);
+    }
+
+    /**
+     * Traduce una dirección del proceso a dirección física.
+     *
+     * En paginación, la dirección recibida es lógica. En las demás estrategias,
+     * se retorna igual porque ya representa una posición física en memoria.
+     *
+     * @param bcp proceso dueño de la dirección.
+     * @param direccionProceso PC lógico/físico según estrategia.
+     * @return dirección física real, o -1 si no se puede traducir.
+     */
+    public int obtenerDireccionFisica(BCP bcp, int direccionProceso) {
+        if (bcp == null) {
+            return -1;
+        }
+
+        switch (Strategy) {
+            case "Pagination":
+                if (Pagination_Strategy != null) {
+                    return Pagination_Strategy.getPhysicalAddress(bcp, direccionProceso, memoria);
+                }
+                return -1;
+
+            default:
+                return direccionProceso;
+        }
+    }
+
     public String leerMemoria(int posicion) {
         if (posicion < 0 || posicion >= tamaño) return null;
         return memoria[posicion];

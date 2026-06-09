@@ -143,7 +143,7 @@ public class Disco {
         nombresVirtuales.add(nombre);
         instruccionesVirtuales.add(java.util.Arrays.copyOf(instrucciones, instrucciones.length));
         for (String instruccion : instrucciones) {
-            memoria_Virtual[puntero_Virtual++] = nombre + ": " + instruccion;
+            memoria_Virtual[puntero_Virtual++] = instruccion;
         }
         return base;
     }
@@ -210,7 +210,7 @@ public class Disco {
 
             for (String instruccion : instrucciones) {
                 if (puntero_Virtual < memoria_Virtual.length) {
-                    memoria_Virtual[puntero_Virtual++] = nombre + ": " + instruccion;
+                    memoria_Virtual[puntero_Virtual++] = instruccion;
                 }
             }
         }
