@@ -75,6 +75,14 @@ public class CPU {
         
         bcp.setTiempoEmpleado(bcp.getTiempoEmpleado() + 1);
 
+        // Si después de ejecutar la instrucción el PC pasa el límite,
+        // el proceso terminó en ESTE ciclo. Antes se detectaba hasta
+        // el siguiente ciclo y eso agregaba +1 al tiempo final.
+        if (bcp.getPc() > bcp.getLimite()) {
+            bcp.setEstado("finalizado");
+            procesoFinalizado = true;
+        }
+
         return true;
     }
     

@@ -151,7 +151,22 @@ public class Interfaz extends javax.swing.JPanel {
     // Historial acumulativo de resultados por algoritmo.
     private java.util.List<ResultadoEstadistica> historialEstadisticas = new java.util.ArrayList<>();
     private int contadorEjecucionesEstadisticas = 0;
-    private String ultimaFirmaEstadisticas = ""; 
+    private String ultimaFirmaEstadisticas = "";
+    private final java.util.Set<String> firmasEstadisticasGuardadas = new java.util.LinkedHashSet<>();
+
+    // Archivos base cargados. Se usan para reconstruir el sistema al cambiar algoritmo.
+    private java.util.List<java.io.File> archivosBasePlanificacion = new java.util.ArrayList<>();
+    private java.util.Map<String, Integer> tiemposLlegadaPorArchivo = new java.util.LinkedHashMap<>();
+    
+    private int configMemoria = DEFAULT_MEMORIA;
+    private int configVirtual = DEFAULT_VIRTUAL;
+    private int configDisco = DEFAULT_DISCO;
+    private String configStrategy = DEFAULT_STRATEGY;
+    private int configPageSize = DEFAULT_PAGE_SIZE;
+    private int configCountPartitions = DEFAULT_COUNT_PARTITIONS;
+    private int[] configPartitionSizes = java.util.Arrays.copyOf(DEFAULT_PARTITION_SIZES, DEFAULT_PARTITION_SIZES.length);
+
+    private boolean ejecucionEnCurso = false;
 
     /**
      * Inicializa la interfaz
@@ -1317,12 +1332,17 @@ public class Interfaz extends javax.swing.JPanel {
         cmbAlgoritmo.addActionListener(e -> {
             actualizarVisibilidadQuantum();
             resetPlanificadorEjecucion();
+            prepararNuevaEjecucionDesdeArchivos("Algoritmo cambiado. Sistema reiniciado para nueva ejecución.");
         });
 
         lblQuantum.setText("Quantum:");
         lblQuantum.setFont(new java.awt.Font("Segoe UI", java.awt.Font.BOLD, 13));
 
         spnQuantum.setModel(new javax.swing.SpinnerNumberModel(2, 1, 100, 1));
+        spnQuantum.addChangeListener(e -> {
+            resetPlanificadorEjecucion();
+            prepararNuevaEjecucionDesdeArchivos("Quantum cambiado. Sistema reiniciado para nueva ejecución.");
+        });
 
         lblCantidadCpus = new javax.swing.JLabel("CPUs:");
         lblCantidadCpus.setFont(new java.awt.Font("Segoe UI", java.awt.Font.BOLD, 13));
@@ -1333,19 +1353,8 @@ public class Interfaz extends javax.swing.JPanel {
         cmbCantidadCpus.setPreferredSize(new java.awt.Dimension(60, 28));
         cmbCantidadCpus.addActionListener(e -> {
             if (!sistemaIniciado) return;
-            int nuevaCantidad = obtenerCantidadCpusSeleccionada();
-            cpus.clear();
-            for (int i = 0; i < nuevaCantidad; i++) {
-                cpus.add(new CPU(memoria, disco));
-            }
-            cpuSeleccionado = 0;
-            actualizarSelectorCpu();
-            cpu = cpus.get(0);
-            dispatcher = new Dispatcher();
-            limpiarTabla(tablaProcesos);
-            limpiarBCP();
-            imprimirTerminal("CPUs ajustadas a " + nuevaCantidad + ". Cola de procesos reiniciada.");
-            mostrarToast("CPUs actualizadas");
+            resetPlanificadorEjecucion();
+            prepararNuevaEjecucionDesdeArchivos("Cantidad de CPUs cambiada. Sistema reiniciado para nueva ejecución.");
         });
 
         jPanel1.setBackground(new java.awt.Color(255, 255, 255));
@@ -2013,6 +2022,16 @@ public class Interfaz extends javax.swing.JPanel {
     ) {
         strategy = normalizarStrategy(strategy);
 
+        configMemoria = sizeMemoria;
+        configVirtual = sizeVirtual;
+        configDisco = sizeDisco;
+        configStrategy = strategy;
+        configPageSize = pageSize;
+        configCountPartitions = countPartitions;
+        configPartitionSizes = partitionSizes == null
+                ? java.util.Arrays.copyOf(DEFAULT_PARTITION_SIZES, DEFAULT_PARTITION_SIZES.length)
+                : java.util.Arrays.copyOf(partitionSizes, partitionSizes.length);
+
         // Primero se crea Disco porque Pagination necesita usar memoria virtual.
         disco = new Disco(sizeVirtual, sizeDisco);
 
@@ -2066,9 +2085,13 @@ public class Interfaz extends javax.swing.JPanel {
         tiempoGlobal = 0;
         coloresPorBCP.clear();
         procesosBasePlanificacion.clear();
+        archivosBasePlanificacion.clear();
+        tiemposLlegadaPorArchivo.clear();
         historialEstadisticas.clear();
         contadorEjecucionesEstadisticas = 0;
         ultimaFirmaEstadisticas = "";
+        firmasEstadisticasGuardadas.clear();
+        ejecucionEnCurso = false;
 
         limpiarTabla(tablaMemoria);
         limpiarTabla(tablaMemoriaVirtual);
@@ -2251,6 +2274,345 @@ public class Interfaz extends javax.swing.JPanel {
         rrRuntime = "RR".equals(algoritmo) ? new RR(quantum) : null;
         srrRuntime = "SRR".equals(algoritmo) ? new SRR(quantum, 1, 3) : null;
         lotteryRuntime = "Lottery".equals(algoritmo) ? new Lottery(quantum) : null;
+    }
+
+
+    private String claveArchivo(java.io.File archivo) {
+        if (archivo == null) {
+            return "";
+        }
+        try {
+            return archivo.getCanonicalPath();
+        } catch (Exception e) {
+            return archivo.getAbsolutePath();
+        }
+    }
+
+    private void registrarArchivoBase(java.io.File archivo) {
+        if (archivo == null) {
+            return;
+        }
+
+        String clave = claveArchivo(archivo);
+        for (java.io.File existente : archivosBasePlanificacion) {
+            if (claveArchivo(existente).equals(clave)) {
+                return;
+            }
+        }
+
+        archivosBasePlanificacion.add(archivo);
+        tiemposLlegadaPorArchivo.putIfAbsent(clave, 0);
+    }
+
+    private Integer buscarTiempoLlegadaPorNombre(String nombreArchivo) {
+        if (nombreArchivo == null) {
+            return null;
+        }
+
+        for (java.io.File archivo : archivosBasePlanificacion) {
+            if (archivo != null && nombreArchivo.equals(archivo.getName())) {
+                return tiemposLlegadaPorArchivo.getOrDefault(claveArchivo(archivo), 0);
+            }
+        }
+
+        return null;
+    }
+
+    private void aplicarTiempoLlegadaABCP(BCP bcp, int tiempoLlegada) {
+        if (bcp == null) {
+            return;
+        }
+
+        bcp.setTiempoLlegada(Math.max(0, tiempoLlegada));
+        bcp.setTiempoInicio(0);
+        bcp.setTiempoFinal(-1);
+        bcp.setTiempoEmpleado(0);
+        bcp.setTiempoEspera(0);
+        bcp.setTurnaround(0);
+        bcp.setTrTs(0.0);
+        bcp.setIniciado(false);
+
+        if (bcp.getRafagaTotal() <= 0) {
+            int rafaga = Math.max(1, bcp.getLimite() - bcp.getBase() + 1);
+            bcp.setRafagaTotal(rafaga);
+        }
+
+        bcp.setRafagaRestante(bcp.getRafagaTotal());
+    }
+
+    private void mostrarModalTiemposLlegada(java.util.List<BCP> procesos) {
+        if (procesos == null || procesos.isEmpty()) {
+            return;
+        }
+
+        java.awt.Window owner = javax.swing.SwingUtilities.getWindowAncestor(this);
+        javax.swing.JDialog dialog = new javax.swing.JDialog(owner, "Tiempos de llegada", java.awt.Dialog.ModalityType.APPLICATION_MODAL);
+        dialog.setDefaultCloseOperation(javax.swing.JDialog.DISPOSE_ON_CLOSE);
+
+        javax.swing.JPanel root = new javax.swing.JPanel(new java.awt.BorderLayout(12, 12));
+        root.setBorder(javax.swing.BorderFactory.createEmptyBorder(16, 18, 16, 18));
+        root.setBackground(java.awt.Color.WHITE);
+
+        javax.swing.JLabel title = new javax.swing.JLabel("Asignar tiempos de llegada");
+        title.setFont(new java.awt.Font("Segoe UI", java.awt.Font.BOLD, 22));
+        title.setForeground(new java.awt.Color(30, 45, 65));
+
+        javax.swing.JLabel subtitle = new javax.swing.JLabel("Edite el tiempo de llegada de cada proceso antes de iniciar la ejecución.");
+        subtitle.setFont(new java.awt.Font("Segoe UI", java.awt.Font.PLAIN, 13));
+        subtitle.setForeground(new java.awt.Color(86, 101, 120));
+
+        javax.swing.JPanel header = new javax.swing.JPanel(new java.awt.GridLayout(2, 1, 0, 2));
+        header.setOpaque(false);
+        header.add(title);
+        header.add(subtitle);
+        root.add(header, java.awt.BorderLayout.NORTH);
+
+        javax.swing.table.DefaultTableModel model = new javax.swing.table.DefaultTableModel(
+                new Object[]{"ID", "Archivo", "Tiempo de llegada"}, 0) {
+            @Override
+            public boolean isCellEditable(int row, int column) {
+                return column == 2;
+            }
+
+            @Override
+            public Class<?> getColumnClass(int columnIndex) {
+                return columnIndex == 2 ? Integer.class : String.class;
+            }
+        };
+
+        for (BCP bcp : procesos) {
+            Integer tiempoGuardado = buscarTiempoLlegadaPorNombre(bcp.getNombreProceso());
+            model.addRow(new Object[]{
+                bcp.getIdProceso(),
+                bcp.getNombreProceso(),
+                tiempoGuardado == null ? bcp.getTiempoLlegada() : tiempoGuardado
+            });
+        }
+
+        javax.swing.JTable table = new javax.swing.JTable(model);
+        estilizarTabla(table);
+        table.setRowHeight(30);
+        table.getColumnModel().getColumn(0).setPreferredWidth(80);
+        table.getColumnModel().getColumn(1).setPreferredWidth(320);
+        table.getColumnModel().getColumn(2).setPreferredWidth(160);
+
+        javax.swing.JScrollPane scroll = new javax.swing.JScrollPane(table);
+        scroll.setPreferredSize(new java.awt.Dimension(620, 220));
+        root.add(scroll, java.awt.BorderLayout.CENTER);
+
+        javax.swing.JButton btnGuardar = new javax.swing.JButton("Guardar tiempos");
+        javax.swing.JButton btnCancelar = new javax.swing.JButton("Dejar en 0");
+
+        btnGuardar.setFocusPainted(false);
+        btnCancelar.setFocusPainted(false);
+        btnGuardar.setBackground(new java.awt.Color(30, 45, 65));
+        btnGuardar.setForeground(java.awt.Color.WHITE);
+        btnCancelar.setBackground(java.awt.Color.WHITE);
+        btnCancelar.setForeground(new java.awt.Color(30, 45, 65));
+
+        btnGuardar.addActionListener(e -> {
+            try {
+                for (int i = 0; i < procesos.size(); i++) {
+                    Object valor = model.getValueAt(i, 2);
+                    int llegada = Integer.parseInt(String.valueOf(valor).trim());
+
+                    if (llegada < 0) {
+                        throw new NumberFormatException("Tiempo negativo");
+                    }
+
+                    BCP bcp = procesos.get(i);
+                    aplicarTiempoLlegadaABCP(bcp, llegada);
+
+                    for (java.io.File archivo : archivosBasePlanificacion) {
+                        if (archivo != null && archivo.getName().equals(bcp.getNombreProceso())) {
+                            tiemposLlegadaPorArchivo.put(claveArchivo(archivo), llegada);
+                            break;
+                        }
+                    }
+
+                    dispatcher.actualizarBCP(bcp);
+                    memoria.actualizarBCPPorId(bcp);
+                    registrarProcesoBaseParaPlanificacion(bcp);
+                }
+
+                ultimaFirmaEstadisticas = "";
+                dialog.dispose();
+                imprimirTerminal("Tiempos de llegada actualizados.");
+                mostrarToast("Tiempos guardados");
+            } catch (Exception ex) {
+                javax.swing.JOptionPane.showMessageDialog(
+                        dialog,
+                        "Los tiempos de llegada deben ser números enteros mayores o iguales a 0.",
+                        "Dato inválido",
+                        javax.swing.JOptionPane.ERROR_MESSAGE
+                );
+            }
+        });
+
+        btnCancelar.addActionListener(e -> dialog.dispose());
+
+        javax.swing.JPanel footer = new javax.swing.JPanel(new java.awt.FlowLayout(java.awt.FlowLayout.RIGHT, 10, 0));
+        footer.setOpaque(false);
+        footer.add(btnCancelar);
+        footer.add(btnGuardar);
+        root.add(footer, java.awt.BorderLayout.SOUTH);
+
+        dialog.setContentPane(root);
+        dialog.pack();
+        dialog.setLocationRelativeTo(this);
+        dialog.setVisible(true);
+    }
+
+    private void prepararNuevaEjecucionDesdeArchivos(String mensaje) {
+        if (ejecucionEnCurso || !sistemaIniciado || archivosBasePlanificacion.isEmpty()) {
+            return;
+        }
+
+        java.util.List<java.io.File> archivos = new java.util.ArrayList<>(archivosBasePlanificacion);
+        java.util.Map<String, Integer> tiempos = new java.util.LinkedHashMap<>(tiemposLlegadaPorArchivo);
+
+        disco = new Disco(configVirtual, configDisco);
+        memoria = new Memoria(configMemoria, configStrategy, disco);
+
+        switch (configStrategy) {
+            case "Pagination":
+                memoria.Creation_Strategy(configPageSize, null);
+                break;
+            case "Partition_Equal":
+                memoria.Creation_Strategy(configCountPartitions, null);
+                break;
+            case "Partition_Different":
+                memoria.Creation_Strategy(0, configPartitionSizes);
+                break;
+            case "Best_Fit":
+                memoria.Creation_Strategy(0, null);
+                break;
+            case "Default":
+            default:
+                memoria.Creation_Strategy(0, null);
+                break;
+        }
+
+        cpus.clear();
+        int cantidadCpus = obtenerCantidadCpusSeleccionada();
+        for (int i = 0; i < cantidadCpus; i++) {
+            cpus.add(new CPU(memoria, disco));
+        }
+
+        cpuSeleccionado = 0;
+        cpu = cpus.isEmpty() ? null : cpus.get(0);
+        dispatcher = new Dispatcher();
+        parser = new Parser();
+        procesosBasePlanificacion.clear();
+        tiempoGlobal = 0;
+        resetPlanificadorEjecucion();
+
+        for (java.io.File archivo : archivos) {
+            BCP bcp = parser.Leer(archivo, memoria, disco);
+            if (bcp == null) {
+                continue;
+            }
+
+            int llegada = tiempos.getOrDefault(claveArchivo(archivo), 0);
+            aplicarTiempoLlegadaABCP(bcp, llegada);
+            dispatcher.registrarProceso(bcp);
+            registrarProcesoBaseParaPlanificacion(bcp);
+
+            if (memoria.obtenerBCPPorId(bcp.getIdProceso()) == null && !memoria.lleno()) {
+                memoria.agregarBCP(bcp);
+            } else {
+                memoria.actualizarBCPPorId(bcp);
+            }
+        }
+
+        archivosBasePlanificacion = archivos;
+        tiemposLlegadaPorArchivo = tiempos;
+        actualizarSelectorCpu();
+        actualizarBCP();
+        actualizarTablaProcesos();
+        actualizarTablaMemoria();
+        actualizarTablaDisco();
+        actualizarTablaVirtual();
+
+        if (mensaje != null && !mensaje.isBlank()) {
+            imprimirTerminal(mensaje);
+            mostrarToast("Listo para ejecutar");
+        }
+    }
+
+    private void guardarEstadisticasEjecucionReal() {
+        if (dispatcher == null) {
+            return;
+        }
+
+        String firmaActual = generarFirmaEstadisticasActual();
+
+        // Evita duplicar resultados si se presiona Estadísticas o Ejecutar
+        // sin cambiar algoritmo, quantum, CPUs o procesos cargados.
+        if (firmasEstadisticasGuardadas.contains(firmaActual)) {
+            return;
+        }
+
+        String algoritmo = String.valueOf(cmbAlgoritmo.getSelectedItem());
+        int quantum = obtenerQuantumSeleccionado();
+        int cantidadCpus = obtenerCantidadCpusSeleccionada();
+        String etiquetaAlgoritmo = construirEtiquetaAlgoritmo(algoritmo, quantum, cantidadCpus);
+
+        /*
+         * IMPORTANTE:
+         * Las estadísticas deben salir de la ejecución real, no de ejecutarAlgoritmo().
+         * ejecutarAlgoritmo() calcula una planificación teórica de una sola CPU.
+         * Por eso con CPUs=2 o CPUs=4 podía mostrar que P3 iniciaba en su llegada,
+         * aunque en la simulación real la CPU todavía estuviera ocupada.
+         *
+         * Aquí se toman los BCP finales del dispatcher, que son los mismos que fueron
+         * ejecutados por las CPUs visuales.
+         */
+        java.util.List<BCP> resultados = dispatcher.obtenerColaProcesos();
+
+        if (resultados == null || resultados.isEmpty()) {
+            return;
+        }
+
+        resultados.sort(java.util.Comparator.comparing(BCP::getIdProceso));
+
+        contadorEjecucionesEstadisticas++;
+
+        for (BCP bcp : resultados) {
+            if (bcp == null) {
+                continue;
+            }
+
+            int rafaga = bcp.getRafagaTotal() > 0
+                    ? bcp.getRafagaTotal()
+                    : Math.max(1, bcp.getTiempoEmpleado());
+
+            int inicioProceso = bcp.getTiempoInicio();
+            int finalProceso = bcp.getTiempoFinal();
+
+            // Respaldo por si algún BCP finalizado no guardó tiempo final.
+            if (finalProceso < 0) {
+                finalProceso = inicioProceso + Math.max(rafaga, bcp.getTiempoEmpleado());
+            }
+
+            int turnaround = finalProceso - bcp.getTiempoLlegada();
+            double trTs = rafaga > 0 ? (double) turnaround / rafaga : 0.0;
+
+            historialEstadisticas.add(new ResultadoEstadistica(
+                    contadorEjecucionesEstadisticas,
+                    etiquetaAlgoritmo,
+                    bcp.getIdProceso(),
+                    bcp.getTiempoLlegada(),
+                    rafaga,
+                    inicioProceso,
+                    finalProceso,
+                    turnaround,
+                    trTs
+            ));
+        }
+
+        firmasEstadisticasGuardadas.add(firmaActual);
+        ultimaFirmaEstadisticas = firmaActual;
     }
 
     private void registrarProcesoBaseParaPlanificacion(BCP bcp) {
@@ -2484,10 +2846,14 @@ public class Interfaz extends javax.swing.JPanel {
         title.setFont(new java.awt.Font("Segoe UI", java.awt.Font.BOLD, 24));
         title.setForeground(new java.awt.Color(35, 49, 66));
 
+        javax.swing.JLabel subtitle = new javax.swing.JLabel("Comparación por algoritmo. Cada bloque muestra sus procesos y promedios.");
+        subtitle.setFont(new java.awt.Font("Segoe UI", java.awt.Font.PLAIN, 13));
+        subtitle.setForeground(new java.awt.Color(86, 101, 120));
 
         headerText.add(title);
         headerText.add(javax.swing.Box.createVerticalStrut(4));
-    
+        headerText.add(subtitle);
+
         javax.swing.JButton btnCerrarSuperior = new javax.swing.JButton("X");
         btnCerrarSuperior.setFocusPainted(false);
         btnCerrarSuperior.setBackground(new java.awt.Color(220, 53, 69));
@@ -2976,9 +3342,23 @@ public class Interfaz extends javax.swing.JPanel {
         if (!validarSistema()) 
             return;
 
-        if (memoria.vacio()) {  
+        if (ejecucionEnCurso) {
+            mostrarToast("Ya hay una ejecución en curso");
+            return;
+        }
+
+        if (memoria.vacio()) {
+            imprimirTerminal("No hay procesos listos. Cargue archivos o cambie de algoritmo para reiniciar.");
+            mostrarToast("No hay procesos listos");
             return; 
         }
+
+        ejecucionEnCurso = true;
+        btnEjecutar.setEnabled(false);
+        btnPasoPaso.setEnabled(false);
+        cmbAlgoritmo.setEnabled(false);
+        spnQuantum.setEnabled(false);
+        cmbCantidadCpus.setEnabled(false);
 
         javax.swing.SwingWorker<Void, Void> worker = new javax.swing.SwingWorker<>() {
             @Override
@@ -3007,8 +3387,16 @@ public class Interfaz extends javax.swing.JPanel {
                 }
 
                 javax.swing.SwingUtilities.invokeLater(() -> {
-                    imprimirTerminal("Todos los procesos finalizados.");
-                    mostrarToast("Ejecucion finalizada");
+                    guardarEstadisticasEjecucionReal();
+                    imprimirTerminal("Todos los procesos finalizados. Estadísticas guardadas.");
+                    mostrarToast("Ejecución finalizada");
+                    ejecucionEnCurso = false;
+                    btnEjecutar.setEnabled(true);
+                    btnPasoPaso.setEnabled(true);
+                    cmbAlgoritmo.setEnabled(true);
+                    spnQuantum.setEnabled(true);
+                    cmbCantidadCpus.setEnabled(true);
+                    actualizarVisibilidadQuantum();
                 });
                 return null;
             }
@@ -3031,6 +3419,14 @@ public class Interfaz extends javax.swing.JPanel {
         actualizarSelectorCpu();
         tiempoGlobal = 0;
         coloresPorBCP.clear();
+        procesosBasePlanificacion.clear();
+        archivosBasePlanificacion.clear();
+        tiemposLlegadaPorArchivo.clear();
+        historialEstadisticas.clear();
+        firmasEstadisticasGuardadas.clear();
+        contadorEjecucionesEstadisticas = 0;
+        ultimaFirmaEstadisticas = "";
+        ejecucionEnCurso = false;
         terminalArea.setText("");
         limpiarTabla(tablaMemoria);
         limpiarTabla(tablaMemoriaVirtual);
@@ -3234,248 +3630,16 @@ public class Interfaz extends javax.swing.JPanel {
             terminalInput.setText("");
         }
     }
-    /**
-     * Muestra una ventana modal para asignar el tiempo de llegada de los procesos recién cargados.
-     * Si el usuario presiona Cancelar o X, se conservan los valores actuales.
-     */
-    private boolean mostrarModalTiemposLlegada(java.util.List<BCP> procesos) {
-        if (procesos == null || procesos.isEmpty()) {
-            return false;
-        }
-
-        if (!javax.swing.SwingUtilities.isEventDispatchThread()) {
-            final boolean[] resultado = {false};
-            try {
-                javax.swing.SwingUtilities.invokeAndWait(() -> resultado[0] = mostrarModalTiemposLlegada(procesos));
-            } catch (Exception e) {
-                return false;
-            }
-            return resultado[0];
-        }
-
-        java.awt.Window owner = javax.swing.SwingUtilities.getWindowAncestor(this);
-
-        javax.swing.JComponent glass = null;
-        javax.swing.RootPaneContainer root = null;
-
-        if (owner instanceof javax.swing.RootPaneContainer) {
-            root = (javax.swing.RootPaneContainer) owner;
-            glass = crearCapaOscura();
-            root.setGlassPane(glass);
-            glass.setVisible(true);
-        }
-
-        final javax.swing.RootPaneContainer rootFinal = root;
-        final javax.swing.JComponent glassFinal = glass;
-        final boolean[] confirmado = {false};
-
-        javax.swing.JDialog dialog = new javax.swing.JDialog(owner, "Tiempos de llegada", java.awt.Dialog.ModalityType.APPLICATION_MODAL);
-        dialog.setUndecorated(true);
-        dialog.setDefaultCloseOperation(javax.swing.JDialog.DISPOSE_ON_CLOSE);
-
-        javax.swing.JPanel main = new javax.swing.JPanel(new java.awt.BorderLayout(0, 12));
-        main.setBackground(java.awt.Color.WHITE);
-        main.setBorder(javax.swing.BorderFactory.createCompoundBorder(
-                javax.swing.BorderFactory.createLineBorder(new java.awt.Color(210, 220, 235), 1),
-                javax.swing.BorderFactory.createEmptyBorder(18, 18, 14, 18)
-        ));
-
-        javax.swing.JPanel header = new javax.swing.JPanel(new java.awt.BorderLayout());
-        header.setOpaque(false);
-
-        javax.swing.JPanel headerText = new javax.swing.JPanel();
-        headerText.setOpaque(false);
-        headerText.setLayout(new javax.swing.BoxLayout(headerText, javax.swing.BoxLayout.Y_AXIS));
-
-        javax.swing.JLabel title = new javax.swing.JLabel("Asignar tiempos de llegada");
-        title.setFont(new java.awt.Font("Segoe UI", java.awt.Font.BOLD, 23));
-        title.setForeground(new java.awt.Color(35, 49, 66));
-
-
-        headerText.add(title);
-        headerText.add(javax.swing.Box.createVerticalStrut(4));
-
-        javax.swing.JButton btnCerrarSuperior = new javax.swing.JButton("X");
-        btnCerrarSuperior.setFocusPainted(false);
-        btnCerrarSuperior.setBackground(new java.awt.Color(220, 53, 69));
-        btnCerrarSuperior.setForeground(java.awt.Color.WHITE);
-        btnCerrarSuperior.setFont(new java.awt.Font("Segoe UI", java.awt.Font.BOLD, 16));
-        btnCerrarSuperior.setBorder(javax.swing.BorderFactory.createEmptyBorder(8, 16, 8, 16));
-        btnCerrarSuperior.addActionListener(e -> dialog.dispose());
-
-        header.add(headerText, java.awt.BorderLayout.CENTER);
-        header.add(btnCerrarSuperior, java.awt.BorderLayout.EAST);
-
-        String[] columnas = {"Proceso", "Archivo", "Tiempo llegada"};
-        javax.swing.table.DefaultTableModel model = new javax.swing.table.DefaultTableModel(columnas, 0) {
-            @Override
-            public boolean isCellEditable(int row, int column) {
-                return column == 2;
-            }
-        };
-
-        for (BCP bcp : procesos) {
-            model.addRow(new Object[]{
-                    bcp.getIdProceso(),
-                    bcp.getNombreProceso(),
-                    bcp.getTiempoLlegada()
-            });
-        }
-
-        javax.swing.JTable table = new javax.swing.JTable(model);
-        table.setRowHeight(30);
-        table.setFont(new java.awt.Font("Consolas", java.awt.Font.PLAIN, 13));
-        table.getTableHeader().setFont(new java.awt.Font("Segoe UI", java.awt.Font.BOLD, 12));
-        table.getTableHeader().setBackground(new java.awt.Color(238, 242, 247));
-        table.getTableHeader().setForeground(new java.awt.Color(50, 66, 85));
-        table.setSelectionBackground(new java.awt.Color(220, 234, 255));
-        table.setSelectionForeground(new java.awt.Color(20, 40, 80));
-        table.setShowGrid(false);
-        table.setIntercellSpacing(new java.awt.Dimension(0, 0));
-
-        javax.swing.SpinnerNumberModel spinnerModel = new javax.swing.SpinnerNumberModel(0, 0, 999999, 1);
-        javax.swing.JSpinner spinner = new javax.swing.JSpinner(spinnerModel);
-        table.getColumnModel().getColumn(2).setCellEditor(new javax.swing.DefaultCellEditor(new javax.swing.JTextField()) {
-            private final javax.swing.JSpinner editorSpinner = spinner;
-
-            @Override
-            public java.awt.Component getTableCellEditorComponent(
-                    javax.swing.JTable table,
-                    Object value,
-                    boolean isSelected,
-                    int row,
-                    int column) {
-                int valor = 0;
-                try {
-                    valor = Integer.parseInt(String.valueOf(value).trim());
-                } catch (Exception e) {
-                    valor = 0;
-                }
-                editorSpinner.setValue(Math.max(0, valor));
-                return editorSpinner;
-            }
-
-            @Override
-            public Object getCellEditorValue() {
-                return editorSpinner.getValue();
-            }
-        });
-
-        table.getColumnModel().getColumn(0).setMinWidth(90);
-        table.getColumnModel().getColumn(0).setPreferredWidth(90);
-        table.getColumnModel().getColumn(1).setPreferredWidth(360);
-        table.getColumnModel().getColumn(2).setMinWidth(130);
-        table.getColumnModel().getColumn(2).setPreferredWidth(150);
-
-        javax.swing.JScrollPane scroll = new javax.swing.JScrollPane(table);
-        scroll.setBorder(javax.swing.BorderFactory.createLineBorder(new java.awt.Color(225, 231, 240)));
-        scroll.setPreferredSize(new java.awt.Dimension(640, Math.min(300, 55 + procesos.size() * 32)));
-
-        javax.swing.JPanel footer = new javax.swing.JPanel(new java.awt.BorderLayout());
-        footer.setOpaque(false);
-
-        javax.swing.JPanel botones = new javax.swing.JPanel(new java.awt.FlowLayout(java.awt.FlowLayout.RIGHT, 8, 0));
-        botones.setOpaque(false);
-
-        javax.swing.JButton btnCancelar = new javax.swing.JButton("Cancelar");
-        btnCancelar.setFocusPainted(false);
-        btnCancelar.setBackground(java.awt.Color.WHITE);
-        btnCancelar.setForeground(new java.awt.Color(35, 49, 66));
-        btnCancelar.setFont(new java.awt.Font("Segoe UI", java.awt.Font.BOLD, 13));
-        btnCancelar.setBorder(javax.swing.BorderFactory.createCompoundBorder(
-                javax.swing.BorderFactory.createLineBorder(new java.awt.Color(218, 226, 236)),
-                javax.swing.BorderFactory.createEmptyBorder(8, 18, 8, 18)
-        ));
-        btnCancelar.addActionListener(e -> dialog.dispose());
-
-        javax.swing.JButton btnGuardar = new javax.swing.JButton("Guardar tiempos");
-        btnGuardar.setFocusPainted(false);
-        btnGuardar.setBackground(new java.awt.Color(35, 49, 66));
-        btnGuardar.setForeground(java.awt.Color.WHITE);
-        btnGuardar.setFont(new java.awt.Font("Segoe UI", java.awt.Font.BOLD, 13));
-        btnGuardar.setBorder(javax.swing.BorderFactory.createEmptyBorder(9, 20, 9, 20));
-        btnGuardar.addActionListener(e -> {
-            if (table.isEditing()) {
-                table.getCellEditor().stopCellEditing();
-            }
-
-            for (int i = 0; i < procesos.size(); i++) {
-                Object valorObj = table.getValueAt(i, 2);
-                int llegada;
-
-                try {
-                    llegada = Integer.parseInt(String.valueOf(valorObj).trim());
-                } catch (Exception ex) {
-                    javax.swing.JOptionPane.showMessageDialog(
-                            dialog,
-                            "El tiempo de llegada del proceso " + procesos.get(i).getIdProceso() + " no es válido.",
-                            "Dato inválido",
-                            javax.swing.JOptionPane.WARNING_MESSAGE
-                    );
-                    return;
-                }
-
-                if (llegada < 0) {
-                    javax.swing.JOptionPane.showMessageDialog(
-                            dialog,
-                            "El tiempo de llegada no puede ser negativo.",
-                            "Dato inválido",
-                            javax.swing.JOptionPane.WARNING_MESSAGE
-                    );
-                    return;
-                }
-
-                procesos.get(i).setTiempoLlegada(llegada);
-            }
-
-            confirmado[0] = true;
-            dialog.dispose();
-        });
-
-        botones.add(btnCancelar);
-        botones.add(btnGuardar);
-        footer.add(botones, java.awt.BorderLayout.EAST);
-
-        main.add(header, java.awt.BorderLayout.NORTH);
-        main.add(scroll, java.awt.BorderLayout.CENTER);
-        main.add(footer, java.awt.BorderLayout.SOUTH);
-
-        dialog.setContentPane(main);
-        dialog.getRootPane().registerKeyboardAction(
-                e -> dialog.dispose(),
-                javax.swing.KeyStroke.getKeyStroke(java.awt.event.KeyEvent.VK_ESCAPE, 0),
-                javax.swing.JComponent.WHEN_IN_FOCUSED_WINDOW
-        );
-
-        dialog.addWindowListener(new java.awt.event.WindowAdapter() {
-            @Override
-            public void windowClosed(java.awt.event.WindowEvent e) {
-                if (glassFinal != null) {
-                    glassFinal.setVisible(false);
-                }
-                if (rootFinal != null) {
-                    rootFinal.setGlassPane(new javax.swing.JPanel());
-                }
-            }
-        });
-
-        dialog.pack();
-        dialog.setLocationRelativeTo(this);
-        dialog.setVisible(true);
-
-        return confirmado[0];
-    }
-
     private void btnEstadisticasActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_btnEstadisticasActionPerformed
         if (!validarSistema()) return;
 
-        if (procesosBasePlanificacion.isEmpty()) {
-            imprimirTerminal("No hay procesos base para planificar. Cargue archivos primero.");
-            mostrarToast("Cargue archivos primero");
+        if (historialEstadisticas.isEmpty()) {
+            imprimirTerminal("No hay estadísticas guardadas. Ejecute primero los procesos.");
+            mostrarToast("Ejecute primero");
             return;
         }
 
-        ejecutarPlanificacionSeleccionada();
+        mostrarEstadisticasAcumuladasModal();
     }//GEN-LAST:event_btnEstadisticasActionPerformed
 
     private void btnCargarArchivosActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_btnCargarArchivosActionPerformed
@@ -3490,7 +3654,7 @@ public class Interfaz extends javax.swing.JPanel {
 
         java.io.File[] archivos = fc.getSelectedFiles();
         int cargados = 0;
-        java.util.List<BCP> procesosCargados = new java.util.ArrayList<>();
+        java.util.List<BCP> procesosCargadosAhora = new java.util.ArrayList<>();
 
         for (java.io.File archivo : archivos) {
             BCP bcp = parser.Leer(archivo, memoria, disco);
@@ -3499,42 +3663,29 @@ public class Interfaz extends javax.swing.JPanel {
                 // El BCP se guarda en la cola/lista del Dispatcher.
                 dispatcher.registrarProceso(bcp);
 
+                registrarArchivoBase(archivo);
+
                 // Se guarda una copia base para poder comparar algoritmos sin volver a cargar archivos.
                 registrarProcesoBaseParaPlanificacion(bcp);
+                procesosCargadosAhora.add(bcp);
 
                 // El BCP vive en memoria de kernel aunque las instrucciones esten en virtual.
                 if (!memoria.lleno()) {
                     memoria.agregarBCP(bcp);
                 }
 
-                procesosCargados.add(bcp);
                 cargados++;
             }
         }
 
         if (cargados > 0) {
-            boolean tiemposConfirmados = mostrarModalTiemposLlegada(procesosCargados);
-
-            // Como el tiempo de llegada se captura después de cargar el BCP,
-            // se actualizan dispatcher, memoria kernel y la copia base de planificación.
-            for (BCP bcp : procesosCargados) {
-                dispatcher.actualizarBCP(bcp);
-                memoria.actualizarBCPPorId(bcp);
-                registrarProcesoBaseParaPlanificacion(bcp);
-            }
-
-            // Obliga a recalcular estadísticas cuando cambian procesos o tiempos de llegada.
+            mostrarModalTiemposLlegada(procesosCargadosAhora);
             ultimaFirmaEstadisticas = "";
-
             actualizarTablaProcesos();
             actualizarTablaMemoria();
             actualizarTablaDisco();
             actualizarTablaVirtual();
             actualizarBCP();
-
-            if (tiemposConfirmados) {
-                mostrarToast("Tiempos de llegada asignados");
-            }
         }
 
         imprimirTerminal("Archivos cargados: " + cargados + "/" + archivos.length);

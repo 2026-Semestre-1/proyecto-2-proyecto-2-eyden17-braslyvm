@@ -201,7 +201,7 @@ public class SRR {
 
             if ("preparado".equalsIgnoreCase(process.getEstado())) {
                 process.setPrioridad(process.getPrioridad() + newPriorityRate);
-            } else if ("ejecuciÃ³n".equalsIgnoreCase(process.getEstado())
+            } else if ("ejecución".equalsIgnoreCase(process.getEstado())
                     || "ejecucion".equalsIgnoreCase(process.getEstado())) {
                 process.setPrioridad(process.getPrioridad() + acceptedPriorityRate);
             }
