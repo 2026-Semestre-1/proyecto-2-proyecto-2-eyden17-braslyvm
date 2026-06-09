@@ -151,6 +151,7 @@ public class Interfaz extends javax.swing.JPanel {
     // Historial acumulativo de resultados por algoritmo.
     private java.util.List<ResultadoEstadistica> historialEstadisticas = new java.util.ArrayList<>();
     private int contadorEjecucionesEstadisticas = 0;
+    private String ultimaFirmaEstadisticas = ""; 
 
     /**
      * Inicializa la interfaz
@@ -2067,6 +2068,7 @@ public class Interfaz extends javax.swing.JPanel {
         procesosBasePlanificacion.clear();
         historialEstadisticas.clear();
         contadorEjecucionesEstadisticas = 0;
+        ultimaFirmaEstadisticas = "";
 
         limpiarTabla(tablaMemoria);
         limpiarTabla(tablaMemoriaVirtual);
@@ -2317,33 +2319,15 @@ public class Interfaz extends javax.swing.JPanel {
         return copias;
     }
 
-    private void ejecutarPlanificacionSeleccionada() {
-        String algoritmo = String.valueOf(cmbAlgoritmo.getSelectedItem());
-        int quantum = obtenerQuantumSeleccionado();
-
-        java.util.List<BCP> procesosParaEjecutar = crearCopiasParaPlanificacion();
-        java.util.List<BCP> resultado = ejecutarAlgoritmo(algoritmo, quantum, procesosParaEjecutar);
-
-        contadorEjecucionesEstadisticas++;
-
-        for (BCP bcp : resultado) {
-            historialEstadisticas.add(new ResultadoEstadistica(
-                    contadorEjecucionesEstadisticas,
-                    algoritmoUsaQuantum(algoritmo) ? algoritmo + " Q=" + quantum : algoritmo,
-                    bcp.getIdProceso(),
-                    bcp.getTiempoLlegada(),
-                    bcp.getRafagaTotal(),
-                    bcp.getTiempoInicio(),
-                    bcp.getTiempoFinal(),
-                    bcp.getTurnaround(),
-                    bcp.getTrTs()
-            ));
+    private java.util.List<BCP> ejecutarAlgoritmo(
+            String algoritmo,
+            int quantum,
+            java.util.List<BCP> procesos
+    ) {
+        if (procesos == null) {
+            return new java.util.ArrayList<>();
         }
 
-        imprimirEstadisticasAcumuladas();
-    }
-
-    private java.util.List<BCP> ejecutarAlgoritmo(String algoritmo, int quantum, java.util.List<BCP> procesos) {
         switch (algoritmo) {
             case "FCFS":
                 return new FCFS().schedule(procesos);
@@ -2358,8 +2342,6 @@ public class Interfaz extends javax.swing.JPanel {
                 return new RR(quantum).schedule(procesos);
 
             case "SRR":
-                // Valores simples para la promoción entre colas.
-                // Si luego desea configurarlos desde JSON, se pueden parametrizar.
                 return new SRR(quantum, 1, 3).schedule(procesos);
 
             case "HRRN":
@@ -2373,33 +2355,307 @@ public class Interfaz extends javax.swing.JPanel {
         }
     }
 
-    private void imprimirEstadisticasAcumuladas() {
-        StringBuilder sb = new StringBuilder();
-        sb.append("\n===== ESTADÍSTICAS ACUMULADAS =====\n");
-        sb.append(String.format(
-                "%-5s %-14s %-22s %-8s %-8s %-8s %-8s %-12s %-8s\n",
-                "Ejec", "Algoritmo", "Proceso", "Lleg", "Ráfaga", "Inicio", "Final", "Turnaround", "Tr/Ts"
-        ));
-        sb.append("------------------------------------------------------------------------------------------------\n");
+    private void ejecutarPlanificacionSeleccionada() {
+        String firmaActual = generarFirmaEstadisticasActual();
 
-        for (ResultadoEstadistica r : historialEstadisticas) {
-            sb.append(String.format(
-                    "%-5d %-14s %-22s %-8d %-8d %-8d %-8d %-12d %-8.2f\n",
-                    r.numeroEjecucion,
-                    r.algoritmo,
-                    abreviar(r.proceso, 22),
+        if (!firmaActual.equals(ultimaFirmaEstadisticas) || historialEstadisticas.isEmpty()) {
+            String algoritmo = String.valueOf(cmbAlgoritmo.getSelectedItem());
+            int quantum = obtenerQuantumSeleccionado();
+            int cantidadCpus = obtenerCantidadCpusSeleccionada();
+
+            java.util.List<BCP> procesosParaEjecutar = crearCopiasParaPlanificacion();
+            java.util.List<BCP> resultado = ejecutarAlgoritmo(algoritmo, quantum, procesosParaEjecutar);
+
+            contadorEjecucionesEstadisticas++;
+
+            String etiquetaAlgoritmo = construirEtiquetaAlgoritmo(algoritmo, quantum, cantidadCpus);
+
+            for (BCP bcp : resultado) {
+                historialEstadisticas.add(new ResultadoEstadistica(
+                        contadorEjecucionesEstadisticas,
+                        etiquetaAlgoritmo,
+                        bcp.getIdProceso(),
+                        bcp.getTiempoLlegada(),
+                        bcp.getRafagaTotal(),
+                        bcp.getTiempoInicio(),
+                        bcp.getTiempoFinal(),
+                        bcp.getTurnaround(),
+                        bcp.getTrTs()
+                ));
+            }
+
+            ultimaFirmaEstadisticas = firmaActual;
+        }
+
+        mostrarEstadisticasAcumuladasModal();
+    }
+
+    private String construirEtiquetaAlgoritmo(String algoritmo, int quantum, int cantidadCpus) {
+        String etiqueta = algoritmoUsaQuantum(algoritmo)
+                ? algoritmo + " Q=" + quantum
+                : algoritmo;
+
+        return etiqueta + " | CPUs=" + cantidadCpus;
+    }
+
+    private String generarFirmaEstadisticasActual() {
+        String algoritmo = String.valueOf(cmbAlgoritmo.getSelectedItem());
+        int quantum = obtenerQuantumSeleccionado();
+        int cantidadCpus = obtenerCantidadCpusSeleccionada();
+
+        StringBuilder firma = new StringBuilder();
+        firma.append(algoritmo).append("|");
+        firma.append(algoritmoUsaQuantum(algoritmo) ? quantum : "-").append("|");
+        firma.append(cantidadCpus).append("|");
+
+        for (BCP bcp : procesosBasePlanificacion) {
+            if (bcp == null) {
+                continue;
+            }
+
+            firma.append(bcp.getIdProceso()).append(":")
+                    .append(bcp.getTiempoLlegada()).append(":")
+                    .append(bcp.getRafagaTotal()).append(":")
+                    .append(bcp.getPrioridad()).append(":")
+                    .append(bcp.getTickets()).append(";");
+        }
+
+        return firma.toString();
+    }
+
+    private java.util.Map<Integer, java.util.List<ResultadoEstadistica>> agruparEstadisticasPorEjecucion() {
+        java.util.Map<Integer, java.util.List<ResultadoEstadistica>> grupos = new java.util.LinkedHashMap<>();
+
+        for (ResultadoEstadistica resultado : historialEstadisticas) {
+            grupos.computeIfAbsent(
+                    resultado.numeroEjecucion,
+                    k -> new java.util.ArrayList<>()
+            ).add(resultado);
+        }
+
+        return grupos;
+    }
+
+    private void mostrarEstadisticasAcumuladasModal() {
+        if (!javax.swing.SwingUtilities.isEventDispatchThread()) {
+            javax.swing.SwingUtilities.invokeLater(this::mostrarEstadisticasAcumuladasModal);
+            return;
+        }
+
+        if (historialEstadisticas.isEmpty()) {
+            mostrarToast("No hay estadísticas para mostrar");
+            return;
+        }
+
+        java.awt.Window owner = javax.swing.SwingUtilities.getWindowAncestor(this);
+
+        javax.swing.JComponent glass = null;
+        javax.swing.RootPaneContainer root = null;
+
+        if (owner instanceof javax.swing.RootPaneContainer) {
+            root = (javax.swing.RootPaneContainer) owner;
+            glass = crearCapaOscura();
+            root.setGlassPane(glass);
+            glass.setVisible(true);
+        }
+
+        final javax.swing.RootPaneContainer rootFinal = root;
+        final javax.swing.JComponent glassFinal = glass;
+
+        javax.swing.JDialog dialog = new javax.swing.JDialog(owner, "Estadísticas acumuladas", java.awt.Dialog.ModalityType.APPLICATION_MODAL);
+        dialog.setUndecorated(true);
+        dialog.setDefaultCloseOperation(javax.swing.JDialog.DISPOSE_ON_CLOSE);
+
+        javax.swing.JPanel main = new javax.swing.JPanel(new java.awt.BorderLayout(0, 12));
+        main.setBackground(java.awt.Color.WHITE);
+        main.setBorder(javax.swing.BorderFactory.createCompoundBorder(
+                javax.swing.BorderFactory.createLineBorder(new java.awt.Color(210, 220, 235), 1),
+                javax.swing.BorderFactory.createEmptyBorder(18, 18, 14, 18)
+        ));
+
+        javax.swing.JPanel header = new javax.swing.JPanel(new java.awt.BorderLayout());
+        header.setOpaque(false);
+
+        javax.swing.JPanel headerText = new javax.swing.JPanel();
+        headerText.setOpaque(false);
+        headerText.setLayout(new javax.swing.BoxLayout(headerText, javax.swing.BoxLayout.Y_AXIS));
+
+        javax.swing.JLabel title = new javax.swing.JLabel("Estadísticas acumuladas");
+        title.setFont(new java.awt.Font("Segoe UI", java.awt.Font.BOLD, 24));
+        title.setForeground(new java.awt.Color(35, 49, 66));
+
+
+        headerText.add(title);
+        headerText.add(javax.swing.Box.createVerticalStrut(4));
+    
+        javax.swing.JButton btnCerrarSuperior = new javax.swing.JButton("X");
+        btnCerrarSuperior.setFocusPainted(false);
+        btnCerrarSuperior.setBackground(new java.awt.Color(220, 53, 69));
+        btnCerrarSuperior.setForeground(java.awt.Color.WHITE);
+        btnCerrarSuperior.setFont(new java.awt.Font("Segoe UI", java.awt.Font.BOLD, 16));
+        btnCerrarSuperior.setBorder(javax.swing.BorderFactory.createEmptyBorder(8, 16, 8, 16));
+        btnCerrarSuperior.addActionListener(e -> dialog.dispose());
+
+        header.add(headerText, java.awt.BorderLayout.CENTER);
+        header.add(btnCerrarSuperior, java.awt.BorderLayout.EAST);
+
+        javax.swing.JPanel content = new javax.swing.JPanel();
+        content.setBackground(new java.awt.Color(246, 248, 251));
+        content.setLayout(new javax.swing.BoxLayout(content, javax.swing.BoxLayout.Y_AXIS));
+        content.setBorder(javax.swing.BorderFactory.createEmptyBorder(10, 10, 10, 10));
+
+        java.util.Map<Integer, java.util.List<ResultadoEstadistica>> grupos = agruparEstadisticasPorEjecucion();
+
+        for (java.util.Map.Entry<Integer, java.util.List<ResultadoEstadistica>> entry : grupos.entrySet()) {
+            content.add(crearPanelGrupoEstadistica(entry.getKey(), entry.getValue()));
+            content.add(javax.swing.Box.createVerticalStrut(12));
+        }
+
+        javax.swing.JScrollPane scroll = new javax.swing.JScrollPane(content);
+        scroll.setBorder(javax.swing.BorderFactory.createLineBorder(new java.awt.Color(225, 231, 240)));
+        scroll.getVerticalScrollBar().setUnitIncrement(16);
+        scroll.setPreferredSize(new java.awt.Dimension(1060, 480));
+
+        javax.swing.JPanel footer = new javax.swing.JPanel(new java.awt.BorderLayout());
+        footer.setOpaque(false);
+
+        javax.swing.JLabel resumen = new javax.swing.JLabel(
+                "Ejecuciones acumuladas: " + grupos.size()
+                        + "  |  Registros: " + historialEstadisticas.size()
+        );
+        resumen.setFont(new java.awt.Font("Segoe UI", java.awt.Font.BOLD, 13));
+        resumen.setForeground(new java.awt.Color(35, 49, 66));
+
+        javax.swing.JButton btnCerrar = new javax.swing.JButton("Cerrar");
+        btnCerrar.setFocusPainted(false);
+        btnCerrar.setBackground(new java.awt.Color(35, 49, 66));
+        btnCerrar.setForeground(java.awt.Color.WHITE);
+        btnCerrar.setFont(new java.awt.Font("Segoe UI", java.awt.Font.BOLD, 13));
+        btnCerrar.setBorder(javax.swing.BorderFactory.createEmptyBorder(8, 20, 8, 20));
+        btnCerrar.addActionListener(e -> dialog.dispose());
+
+        footer.add(resumen, java.awt.BorderLayout.WEST);
+        footer.add(btnCerrar, java.awt.BorderLayout.EAST);
+
+        main.add(header, java.awt.BorderLayout.NORTH);
+        main.add(scroll, java.awt.BorderLayout.CENTER);
+        main.add(footer, java.awt.BorderLayout.SOUTH);
+
+        dialog.setContentPane(main);
+        dialog.getRootPane().registerKeyboardAction(
+                e -> dialog.dispose(),
+                javax.swing.KeyStroke.getKeyStroke(java.awt.event.KeyEvent.VK_ESCAPE, 0),
+                javax.swing.JComponent.WHEN_IN_FOCUSED_WINDOW
+        );
+
+        dialog.addWindowListener(new java.awt.event.WindowAdapter() {
+            @Override
+            public void windowClosed(java.awt.event.WindowEvent e) {
+                if (glassFinal != null) {
+                    glassFinal.setVisible(false);
+                }
+                if (rootFinal != null) {
+                    rootFinal.setGlassPane(new javax.swing.JPanel());
+                }
+            }
+        });
+
+        dialog.pack();
+        dialog.setLocationRelativeTo(this);
+        dialog.setVisible(true);
+    }
+
+    private javax.swing.JComponent crearCapaOscura() {
+        return new javax.swing.JPanel() {
+            {
+                setOpaque(false);
+            }
+
+            @Override
+            protected void paintComponent(java.awt.Graphics g) {
+                super.paintComponent(g);
+                java.awt.Graphics2D g2 = (java.awt.Graphics2D) g.create();
+                g2.setColor(new java.awt.Color(0, 0, 0, 175));
+                g2.fillRect(0, 0, getWidth(), getHeight());
+                g2.dispose();
+            }
+        };
+    }
+
+    private javax.swing.JPanel crearPanelGrupoEstadistica(int numeroEjecucion, java.util.List<ResultadoEstadistica> registros) {
+        javax.swing.JPanel panel = new javax.swing.JPanel(new java.awt.BorderLayout(0, 8));
+        panel.setBackground(java.awt.Color.WHITE);
+        panel.setBorder(javax.swing.BorderFactory.createCompoundBorder(
+                javax.swing.BorderFactory.createLineBorder(new java.awt.Color(218, 226, 236)),
+                javax.swing.BorderFactory.createEmptyBorder(12, 12, 12, 12)
+        ));
+
+        String algoritmo = registros.isEmpty() ? "Sin algoritmo" : registros.get(0).algoritmo;
+
+        javax.swing.JLabel titulo = new javax.swing.JLabel("Ejecución " + numeroEjecucion + " • " + algoritmo);
+        titulo.setFont(new java.awt.Font("Segoe UI", java.awt.Font.BOLD, 16));
+        titulo.setForeground(new java.awt.Color(35, 49, 66));
+
+        String[] columnas = {"Proceso", "Llegada", "Ráfaga", "Inicio", "Final", "Turnaround", "Tr/Ts"};
+        javax.swing.table.DefaultTableModel model = new javax.swing.table.DefaultTableModel(columnas, 0) {
+            @Override
+            public boolean isCellEditable(int row, int column) {
+                return false;
+            }
+        };
+
+        double sumaTrTs = 0.0;
+        double sumaTurnaround = 0.0;
+
+        for (ResultadoEstadistica r : registros) {
+            sumaTrTs += r.trTs;
+            sumaTurnaround += r.turnaround;
+
+            model.addRow(new Object[]{
+                    r.proceso,
                     r.tiempoLlegada,
                     r.rafaga,
                     r.tiempoInicio,
                     r.tiempoFinal,
                     r.turnaround,
-                    r.trTs
-            ));
+                    String.format(java.util.Locale.US, "%.2f", r.trTs)
+            });
         }
 
-        sb.append("====================================\n");
+        javax.swing.JTable table = new javax.swing.JTable(model);
+        table.setRowHeight(26);
+        table.setFont(new java.awt.Font("Consolas", java.awt.Font.PLAIN, 13));
+        table.getTableHeader().setFont(new java.awt.Font("Segoe UI", java.awt.Font.BOLD, 12));
+        table.getTableHeader().setBackground(new java.awt.Color(238, 242, 247));
+        table.getTableHeader().setForeground(new java.awt.Color(50, 66, 85));
+        table.setShowGrid(false);
+        table.setIntercellSpacing(new java.awt.Dimension(0, 0));
+        table.setFillsViewportHeight(true);
 
-        imprimirTerminal(sb.toString());
+        javax.swing.JScrollPane tableScroll = new javax.swing.JScrollPane(table);
+        tableScroll.setBorder(javax.swing.BorderFactory.createLineBorder(new java.awt.Color(232, 236, 244)));
+        tableScroll.setPreferredSize(new java.awt.Dimension(1000, Math.min(220, 45 + registros.size() * 28)));
+
+        int cantidad = Math.max(1, registros.size());
+        double mediaTrTs = sumaTrTs / cantidad;
+        double mediaTurnaround = sumaTurnaround / cantidad;
+
+        javax.swing.JLabel promedio = new javax.swing.JLabel(
+                "Media Tr/Ts: " + String.format(java.util.Locale.US, "%.2f", mediaTrTs)
+                        + "   |   Media Turnaround: " + String.format(java.util.Locale.US, "%.2f", mediaTurnaround)
+                        + "   |   Procesos: " + registros.size()
+        );
+        promedio.setOpaque(true);
+        promedio.setBackground(new java.awt.Color(232, 245, 233));
+        promedio.setForeground(new java.awt.Color(35, 80, 45));
+        promedio.setFont(new java.awt.Font("Segoe UI", java.awt.Font.BOLD, 13));
+        promedio.setBorder(javax.swing.BorderFactory.createEmptyBorder(8, 10, 8, 10));
+
+        panel.add(titulo, java.awt.BorderLayout.NORTH);
+        panel.add(tableScroll, java.awt.BorderLayout.CENTER);
+        panel.add(promedio, java.awt.BorderLayout.SOUTH);
+
+        return panel;
     }
 
     private String abreviar(String texto, int max) {
@@ -2978,6 +3234,238 @@ public class Interfaz extends javax.swing.JPanel {
             terminalInput.setText("");
         }
     }
+    /**
+     * Muestra una ventana modal para asignar el tiempo de llegada de los procesos recién cargados.
+     * Si el usuario presiona Cancelar o X, se conservan los valores actuales.
+     */
+    private boolean mostrarModalTiemposLlegada(java.util.List<BCP> procesos) {
+        if (procesos == null || procesos.isEmpty()) {
+            return false;
+        }
+
+        if (!javax.swing.SwingUtilities.isEventDispatchThread()) {
+            final boolean[] resultado = {false};
+            try {
+                javax.swing.SwingUtilities.invokeAndWait(() -> resultado[0] = mostrarModalTiemposLlegada(procesos));
+            } catch (Exception e) {
+                return false;
+            }
+            return resultado[0];
+        }
+
+        java.awt.Window owner = javax.swing.SwingUtilities.getWindowAncestor(this);
+
+        javax.swing.JComponent glass = null;
+        javax.swing.RootPaneContainer root = null;
+
+        if (owner instanceof javax.swing.RootPaneContainer) {
+            root = (javax.swing.RootPaneContainer) owner;
+            glass = crearCapaOscura();
+            root.setGlassPane(glass);
+            glass.setVisible(true);
+        }
+
+        final javax.swing.RootPaneContainer rootFinal = root;
+        final javax.swing.JComponent glassFinal = glass;
+        final boolean[] confirmado = {false};
+
+        javax.swing.JDialog dialog = new javax.swing.JDialog(owner, "Tiempos de llegada", java.awt.Dialog.ModalityType.APPLICATION_MODAL);
+        dialog.setUndecorated(true);
+        dialog.setDefaultCloseOperation(javax.swing.JDialog.DISPOSE_ON_CLOSE);
+
+        javax.swing.JPanel main = new javax.swing.JPanel(new java.awt.BorderLayout(0, 12));
+        main.setBackground(java.awt.Color.WHITE);
+        main.setBorder(javax.swing.BorderFactory.createCompoundBorder(
+                javax.swing.BorderFactory.createLineBorder(new java.awt.Color(210, 220, 235), 1),
+                javax.swing.BorderFactory.createEmptyBorder(18, 18, 14, 18)
+        ));
+
+        javax.swing.JPanel header = new javax.swing.JPanel(new java.awt.BorderLayout());
+        header.setOpaque(false);
+
+        javax.swing.JPanel headerText = new javax.swing.JPanel();
+        headerText.setOpaque(false);
+        headerText.setLayout(new javax.swing.BoxLayout(headerText, javax.swing.BoxLayout.Y_AXIS));
+
+        javax.swing.JLabel title = new javax.swing.JLabel("Asignar tiempos de llegada");
+        title.setFont(new java.awt.Font("Segoe UI", java.awt.Font.BOLD, 23));
+        title.setForeground(new java.awt.Color(35, 49, 66));
+
+
+        headerText.add(title);
+        headerText.add(javax.swing.Box.createVerticalStrut(4));
+
+        javax.swing.JButton btnCerrarSuperior = new javax.swing.JButton("X");
+        btnCerrarSuperior.setFocusPainted(false);
+        btnCerrarSuperior.setBackground(new java.awt.Color(220, 53, 69));
+        btnCerrarSuperior.setForeground(java.awt.Color.WHITE);
+        btnCerrarSuperior.setFont(new java.awt.Font("Segoe UI", java.awt.Font.BOLD, 16));
+        btnCerrarSuperior.setBorder(javax.swing.BorderFactory.createEmptyBorder(8, 16, 8, 16));
+        btnCerrarSuperior.addActionListener(e -> dialog.dispose());
+
+        header.add(headerText, java.awt.BorderLayout.CENTER);
+        header.add(btnCerrarSuperior, java.awt.BorderLayout.EAST);
+
+        String[] columnas = {"Proceso", "Archivo", "Tiempo llegada"};
+        javax.swing.table.DefaultTableModel model = new javax.swing.table.DefaultTableModel(columnas, 0) {
+            @Override
+            public boolean isCellEditable(int row, int column) {
+                return column == 2;
+            }
+        };
+
+        for (BCP bcp : procesos) {
+            model.addRow(new Object[]{
+                    bcp.getIdProceso(),
+                    bcp.getNombreProceso(),
+                    bcp.getTiempoLlegada()
+            });
+        }
+
+        javax.swing.JTable table = new javax.swing.JTable(model);
+        table.setRowHeight(30);
+        table.setFont(new java.awt.Font("Consolas", java.awt.Font.PLAIN, 13));
+        table.getTableHeader().setFont(new java.awt.Font("Segoe UI", java.awt.Font.BOLD, 12));
+        table.getTableHeader().setBackground(new java.awt.Color(238, 242, 247));
+        table.getTableHeader().setForeground(new java.awt.Color(50, 66, 85));
+        table.setSelectionBackground(new java.awt.Color(220, 234, 255));
+        table.setSelectionForeground(new java.awt.Color(20, 40, 80));
+        table.setShowGrid(false);
+        table.setIntercellSpacing(new java.awt.Dimension(0, 0));
+
+        javax.swing.SpinnerNumberModel spinnerModel = new javax.swing.SpinnerNumberModel(0, 0, 999999, 1);
+        javax.swing.JSpinner spinner = new javax.swing.JSpinner(spinnerModel);
+        table.getColumnModel().getColumn(2).setCellEditor(new javax.swing.DefaultCellEditor(new javax.swing.JTextField()) {
+            private final javax.swing.JSpinner editorSpinner = spinner;
+
+            @Override
+            public java.awt.Component getTableCellEditorComponent(
+                    javax.swing.JTable table,
+                    Object value,
+                    boolean isSelected,
+                    int row,
+                    int column) {
+                int valor = 0;
+                try {
+                    valor = Integer.parseInt(String.valueOf(value).trim());
+                } catch (Exception e) {
+                    valor = 0;
+                }
+                editorSpinner.setValue(Math.max(0, valor));
+                return editorSpinner;
+            }
+
+            @Override
+            public Object getCellEditorValue() {
+                return editorSpinner.getValue();
+            }
+        });
+
+        table.getColumnModel().getColumn(0).setMinWidth(90);
+        table.getColumnModel().getColumn(0).setPreferredWidth(90);
+        table.getColumnModel().getColumn(1).setPreferredWidth(360);
+        table.getColumnModel().getColumn(2).setMinWidth(130);
+        table.getColumnModel().getColumn(2).setPreferredWidth(150);
+
+        javax.swing.JScrollPane scroll = new javax.swing.JScrollPane(table);
+        scroll.setBorder(javax.swing.BorderFactory.createLineBorder(new java.awt.Color(225, 231, 240)));
+        scroll.setPreferredSize(new java.awt.Dimension(640, Math.min(300, 55 + procesos.size() * 32)));
+
+        javax.swing.JPanel footer = new javax.swing.JPanel(new java.awt.BorderLayout());
+        footer.setOpaque(false);
+
+        javax.swing.JPanel botones = new javax.swing.JPanel(new java.awt.FlowLayout(java.awt.FlowLayout.RIGHT, 8, 0));
+        botones.setOpaque(false);
+
+        javax.swing.JButton btnCancelar = new javax.swing.JButton("Cancelar");
+        btnCancelar.setFocusPainted(false);
+        btnCancelar.setBackground(java.awt.Color.WHITE);
+        btnCancelar.setForeground(new java.awt.Color(35, 49, 66));
+        btnCancelar.setFont(new java.awt.Font("Segoe UI", java.awt.Font.BOLD, 13));
+        btnCancelar.setBorder(javax.swing.BorderFactory.createCompoundBorder(
+                javax.swing.BorderFactory.createLineBorder(new java.awt.Color(218, 226, 236)),
+                javax.swing.BorderFactory.createEmptyBorder(8, 18, 8, 18)
+        ));
+        btnCancelar.addActionListener(e -> dialog.dispose());
+
+        javax.swing.JButton btnGuardar = new javax.swing.JButton("Guardar tiempos");
+        btnGuardar.setFocusPainted(false);
+        btnGuardar.setBackground(new java.awt.Color(35, 49, 66));
+        btnGuardar.setForeground(java.awt.Color.WHITE);
+        btnGuardar.setFont(new java.awt.Font("Segoe UI", java.awt.Font.BOLD, 13));
+        btnGuardar.setBorder(javax.swing.BorderFactory.createEmptyBorder(9, 20, 9, 20));
+        btnGuardar.addActionListener(e -> {
+            if (table.isEditing()) {
+                table.getCellEditor().stopCellEditing();
+            }
+
+            for (int i = 0; i < procesos.size(); i++) {
+                Object valorObj = table.getValueAt(i, 2);
+                int llegada;
+
+                try {
+                    llegada = Integer.parseInt(String.valueOf(valorObj).trim());
+                } catch (Exception ex) {
+                    javax.swing.JOptionPane.showMessageDialog(
+                            dialog,
+                            "El tiempo de llegada del proceso " + procesos.get(i).getIdProceso() + " no es válido.",
+                            "Dato inválido",
+                            javax.swing.JOptionPane.WARNING_MESSAGE
+                    );
+                    return;
+                }
+
+                if (llegada < 0) {
+                    javax.swing.JOptionPane.showMessageDialog(
+                            dialog,
+                            "El tiempo de llegada no puede ser negativo.",
+                            "Dato inválido",
+                            javax.swing.JOptionPane.WARNING_MESSAGE
+                    );
+                    return;
+                }
+
+                procesos.get(i).setTiempoLlegada(llegada);
+            }
+
+            confirmado[0] = true;
+            dialog.dispose();
+        });
+
+        botones.add(btnCancelar);
+        botones.add(btnGuardar);
+        footer.add(botones, java.awt.BorderLayout.EAST);
+
+        main.add(header, java.awt.BorderLayout.NORTH);
+        main.add(scroll, java.awt.BorderLayout.CENTER);
+        main.add(footer, java.awt.BorderLayout.SOUTH);
+
+        dialog.setContentPane(main);
+        dialog.getRootPane().registerKeyboardAction(
+                e -> dialog.dispose(),
+                javax.swing.KeyStroke.getKeyStroke(java.awt.event.KeyEvent.VK_ESCAPE, 0),
+                javax.swing.JComponent.WHEN_IN_FOCUSED_WINDOW
+        );
+
+        dialog.addWindowListener(new java.awt.event.WindowAdapter() {
+            @Override
+            public void windowClosed(java.awt.event.WindowEvent e) {
+                if (glassFinal != null) {
+                    glassFinal.setVisible(false);
+                }
+                if (rootFinal != null) {
+                    rootFinal.setGlassPane(new javax.swing.JPanel());
+                }
+            }
+        });
+
+        dialog.pack();
+        dialog.setLocationRelativeTo(this);
+        dialog.setVisible(true);
+
+        return confirmado[0];
+    }
+
     private void btnEstadisticasActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_btnEstadisticasActionPerformed
         if (!validarSistema()) return;
 
@@ -3002,6 +3490,7 @@ public class Interfaz extends javax.swing.JPanel {
 
         java.io.File[] archivos = fc.getSelectedFiles();
         int cargados = 0;
+        java.util.List<BCP> procesosCargados = new java.util.ArrayList<>();
 
         for (java.io.File archivo : archivos) {
             BCP bcp = parser.Leer(archivo, memoria, disco);
@@ -3018,16 +3507,34 @@ public class Interfaz extends javax.swing.JPanel {
                     memoria.agregarBCP(bcp);
                 }
 
+                procesosCargados.add(bcp);
                 cargados++;
             }
         }
 
         if (cargados > 0) {
+            boolean tiemposConfirmados = mostrarModalTiemposLlegada(procesosCargados);
+
+            // Como el tiempo de llegada se captura después de cargar el BCP,
+            // se actualizan dispatcher, memoria kernel y la copia base de planificación.
+            for (BCP bcp : procesosCargados) {
+                dispatcher.actualizarBCP(bcp);
+                memoria.actualizarBCPPorId(bcp);
+                registrarProcesoBaseParaPlanificacion(bcp);
+            }
+
+            // Obliga a recalcular estadísticas cuando cambian procesos o tiempos de llegada.
+            ultimaFirmaEstadisticas = "";
+
             actualizarTablaProcesos();
             actualizarTablaMemoria();
             actualizarTablaDisco();
             actualizarTablaVirtual();
             actualizarBCP();
+
+            if (tiemposConfirmados) {
+                mostrarToast("Tiempos de llegada asignados");
+            }
         }
 
         imprimirTerminal("Archivos cargados: " + cargados + "/" + archivos.length);
