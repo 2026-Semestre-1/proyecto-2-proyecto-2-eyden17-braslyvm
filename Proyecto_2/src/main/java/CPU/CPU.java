@@ -57,11 +57,7 @@ public class CPU {
             return false;
         }
 
-        // IMPORTANTE:
-        // No se lee directamente con leerMemoria(pc), porque en paginación
-        // el PC es lógico. Memoria se encarga de traducirlo a dirección física.
-        String instruccion = memoria.leerInstruccion(bcp);
-
+        String instruccion = memoria.leerMemoria(pc);
         if (instruccion == null || instruccion.trim().isEmpty()) {
             bcp.setEstado("finalizado");
             procesoFinalizado = true;

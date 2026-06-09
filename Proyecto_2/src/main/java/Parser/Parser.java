@@ -9,6 +9,7 @@ import java.io.IOException;
 import java.io.File;
 
 public class Parser {
+    private int siguienteIdProceso = 1;
 
     /**
      * Lee el archivo .asm, valida cada línea y carga las instrucciones en memoria.
@@ -60,56 +61,49 @@ public class Parser {
             }
 
             String[] arreglo = instrucciones.toArray(new String[0]);
-
             if (!disco.guardarPrograma(archivo.getName(), arreglo)) {
                 return null;
             }
 
-            BCP bcp = new BCP(
-                    archivo.getName(),
-                    archivo.getName(),
-                    "nuevo",
-                    -1,
-                    -1,
-                    -1,
-                    0
-            );
+            String idProceso = generarIdProceso();
 
-            // Datos base del proceso. Estos valores se usan tanto para ejecución
-            // como para estadísticas y algoritmos de planificación.
-            bcp.setRafagaTotal(arreglo.length);
-            bcp.setRafagaRestante(arreglo.length);
-            bcp.setTiempoLlegada(0);
-            bcp.setTiempoInicio(0);
-            bcp.setTiempoFinal(-1);
-            bcp.setTiempoEmpleado(0);
-            bcp.setTiempoEspera(0);
-            bcp.setTurnaround(0);
-            bcp.setTrTs(0.0);
-            bcp.setTickets(1);
-            bcp.setQuantumRestante(0);
-            bcp.setIniciado(false);
+            if (!memoria.lleno() && memoria.hayEspacioUsuario(arreglo.length)) {
+                int[] resultado = memoria.cargarInstruccionesSiCabe(arreglo);
+                int baseFinal = resultado[0];
+                int limiteFinal = resultado[1];
 
-            // IMPORTANTE:
-            // No se debe usar hayEspacioUsuario() ni cargarInstruccionesSiCabe(),
-            // porque eso carga de forma continua. asignarProceso() respeta la
-            // estrategia activa: Best Fit, particiones o paginación.
-            if (!memoria.lleno() && memoria.hayEspacioParaProceso(arreglo)) {
-                int[] resultado = memoria.asignarProceso(bcp, arreglo);
+                BCP bcp = new BCP(
+                        idProceso,
+                        archivo.getName(),
+                        "preparado",
+                        baseFinal,
+                        limiteFinal,
+                        baseFinal,
+                        0
+                );
 
-                if (resultado != null) {
-                    bcp.setEstado("preparado");
-                    return bcp;
-                }
+                bcp.setTiempoLlegada(0);
+                bcp.setRafagaTotal(cantidadInstrucciones);
+                return bcp;
             }
 
             int baseVirtual = disco.cargarProcesoEnVirtual(archivo.getName(), arreglo);
-
             if (baseVirtual == -1) {
                 return null;
             }
 
-            bcp.setEstado("nuevo");
+            BCP bcp = new BCP(
+                    idProceso,
+                    archivo.getName(),
+                    "nuevo",
+                    -1,
+                    arreglo.length,
+                    -1,
+                    0
+            );
+
+            bcp.setTiempoLlegada(0);
+            bcp.setRafagaTotal(cantidadInstrucciones);
             return bcp;
 
         } catch (IOException e) {
@@ -121,6 +115,10 @@ public class Parser {
             );
             return null;
         }
+    }
+
+    private String generarIdProceso() {
+        return "P" + siguienteIdProceso++;
     }
 
     public boolean ValidarLinea(String linea) {

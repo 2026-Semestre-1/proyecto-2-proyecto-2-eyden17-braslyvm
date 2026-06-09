@@ -74,12 +74,7 @@ public class Dispatcher {
 
         if (actual.getEstado().equalsIgnoreCase("finalizado")) {
             actualizarBCP(actual);
-
-            // Antes se usaba liberarYCompactarProceso(), pero eso solo sirve
-            // para memoria continua/default. Ahora se usa liberarProceso(),
-            // que respeta la estrategia actual: Best Fit, particiones o paginación.
-            memoria.liberarProceso(actual);
-
+            memoria.liberarYCompactarProceso(actual);
             memoria.eliminarPrimerBCP();
             actualizarBCPsDeMemoriaEnDispatcher(memoria);
             cargarDesdeMemoriaVirtual(memoria, disco);
@@ -131,37 +126,30 @@ public class Dispatcher {
                 return;
             }
 
-            BCP bcp = buscarBCP(nombre);
-
-            if (bcp == null) {
-                bcp = new BCP(nombre, nombre, "nuevo", -1, -1, -1, 0);
-            }
-
-            bcp.setEstado("nuevo");
-            bcp.setIr("");
-
-            if (bcp.getRafagaTotal() <= 0) {
-                bcp.setRafagaTotal(instrucciones.length);
-            }
-
-            if (bcp.getRafagaRestante() <= 0) {
-                bcp.setRafagaRestante(bcp.getRafagaTotal());
-            }
-
-            int[] resultado = memoria.asignarProceso(bcp, instrucciones);
-
+            int[] resultado = memoria.cargarInstruccionesSiCabe(instrucciones);
             if (resultado == null) {
                 return;
             }
 
-            bcp.setEstado("preparado");
+            int base = resultado[0];
+            int limite = resultado[1];
+
+            BCP bcp = buscarBCP(nombre);
+            if (bcp == null) {
+                bcp = new BCP(nombre, nombre, "preparado", base, limite, base, 0);
+            } else {
+                bcp.setEstado("preparado");
+                bcp.setBase(base);
+                bcp.setLimite(limite);
+                bcp.setPc(base);
+                bcp.setIr("");
+            }
 
             if (memoria.obtenerBCPPorId(bcp.getIdProceso()) != null) {
                 memoria.actualizarBCPPorId(bcp);
             } else {
                 memoria.agregarBCP(bcp);
             }
-
             actualizarBCP(bcp);
             disco.eliminarProcesoVirtual(indice);
             cargoAlMenosUno = true;
