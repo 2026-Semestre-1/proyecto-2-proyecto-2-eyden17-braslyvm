@@ -2529,12 +2529,23 @@ public class Interfaz extends javax.swing.JPanel {
             return;
         }
 
-        resultados.sort(java.util.Comparator.comparing(BCP::getIdProceso));
+        resultados.sort(java.util.Comparator
+                .comparingInt((BCP bcp) -> bcp.getTiempoFinal() < 0 ? Integer.MAX_VALUE : bcp.getTiempoFinal())
+                .thenComparing(BCP::getIdProceso));
 
-        contadorEjecucionesEstadisticas++;
+        int numeroEjecucion = contadorEjecucionesEstadisticas + 1;
+        java.util.List<ResultadoEstadistica> registrosEjecucion = new java.util.ArrayList<>();
 
         for (BCP bcp : resultados) {
             if (bcp == null) {
+                continue;
+            }
+
+            boolean finalizado = "finalizado".equalsIgnoreCase(bcp.getEstado())
+                    || bcp.getTiempoFinal() >= 0
+                    || (bcp.getRafagaTotal() > 0 && bcp.getRafagaRestante() <= 0);
+
+            if (!finalizado) {
                 continue;
             }
 
@@ -2542,29 +2553,57 @@ public class Interfaz extends javax.swing.JPanel {
                     ? bcp.getRafagaTotal()
                     : Math.max(1, bcp.getTiempoEmpleado());
 
-            int inicioProceso = bcp.getTiempoInicio();
+            int llegada = Math.max(0, bcp.getTiempoLlegada());
+            int inicioProceso = bcp.isIniciado()
+                    ? bcp.getTiempoInicio()
+                    : Math.max(llegada, bcp.getTiempoFinal() - rafaga);
             int finalProceso = bcp.getTiempoFinal();
 
             // Respaldo por si algún BCP finalizado no guardó tiempo final.
             if (finalProceso < 0) {
+                finalProceso = tiempoGlobal > 0
+                        ? tiempoGlobal
+                        : inicioProceso + Math.max(rafaga, bcp.getTiempoEmpleado());
+            }
+
+            if (inicioProceso < llegada) {
+                inicioProceso = llegada;
+            }
+
+            if (finalProceso < inicioProceso) {
                 finalProceso = inicioProceso + Math.max(rafaga, bcp.getTiempoEmpleado());
             }
 
-            int turnaround = finalProceso - bcp.getTiempoLlegada();
+            int turnaround = Math.max(0, finalProceso - llegada);
+            int espera = Math.max(0, turnaround - rafaga);
             double trTs = rafaga > 0 ? (double) turnaround / rafaga : 0.0;
 
-            historialEstadisticas.add(new ResultadoEstadistica(
-                    contadorEjecucionesEstadisticas,
+            bcp.setTiempoInicio(inicioProceso);
+            bcp.setTiempoFinal(finalProceso);
+            bcp.setTiempoEspera(espera);
+            bcp.setTurnaround(turnaround);
+            bcp.setTrTs(trTs);
+
+            registrosEjecucion.add(new ResultadoEstadistica(
+                    numeroEjecucion,
                     etiquetaAlgoritmo,
                     bcp.getIdProceso(),
-                    bcp.getTiempoLlegada(),
+                    llegada,
                     rafaga,
                     inicioProceso,
                     finalProceso,
+                    espera,
                     turnaround,
                     trTs
             ));
         }
+
+        if (registrosEjecucion.isEmpty()) {
+            return;
+        }
+
+        contadorEjecucionesEstadisticas = numeroEjecucion;
+        historialEstadisticas.addAll(registrosEjecucion);
 
         firmasEstadisticasGuardadas.add(firmaActual);
         ultimaFirmaEstadisticas = firmaActual;
@@ -2700,6 +2739,7 @@ public class Interfaz extends javax.swing.JPanel {
                         bcp.getRafagaTotal(),
                         bcp.getTiempoInicio(),
                         bcp.getTiempoFinal(),
+                        bcp.getTiempoEspera(),
                         bcp.getTurnaround(),
                         bcp.getTrTs()
                 ));
@@ -2921,7 +2961,7 @@ public class Interfaz extends javax.swing.JPanel {
         titulo.setFont(new java.awt.Font("Segoe UI", java.awt.Font.BOLD, 16));
         titulo.setForeground(new java.awt.Color(35, 49, 66));
 
-        String[] columnas = {"Proceso", "Llegada", "Ráfaga", "Inicio", "Final", "Turnaround", "Tr/Ts"};
+        String[] columnas = {"Proceso", "Llegada", "Rafaga", "Inicio", "Final", "Espera", "Turnaround", "Tr/Ts"};
         javax.swing.table.DefaultTableModel model = new javax.swing.table.DefaultTableModel(columnas, 0) {
             @Override
             public boolean isCellEditable(int row, int column) {
@@ -2931,10 +2971,12 @@ public class Interfaz extends javax.swing.JPanel {
 
         double sumaTrTs = 0.0;
         double sumaTurnaround = 0.0;
+        double sumaEspera = 0.0;
 
         for (ResultadoEstadistica r : registros) {
             sumaTrTs += r.trTs;
             sumaTurnaround += r.turnaround;
+            sumaEspera += r.tiempoEspera;
 
             model.addRow(new Object[]{
                     r.proceso,
@@ -2942,6 +2984,7 @@ public class Interfaz extends javax.swing.JPanel {
                     r.rafaga,
                     r.tiempoInicio,
                     r.tiempoFinal,
+                    r.tiempoEspera,
                     r.turnaround,
                     String.format(java.util.Locale.US, "%.2f", r.trTs)
             });
@@ -2964,9 +3007,11 @@ public class Interfaz extends javax.swing.JPanel {
         int cantidad = Math.max(1, registros.size());
         double mediaTrTs = sumaTrTs / cantidad;
         double mediaTurnaround = sumaTurnaround / cantidad;
+        double mediaEspera = sumaEspera / cantidad;
 
         javax.swing.JLabel promedio = new javax.swing.JLabel(
                 "Media Tr/Ts: " + String.format(java.util.Locale.US, "%.2f", mediaTrTs)
+                        + "   |   Media Espera: " + String.format(java.util.Locale.US, "%.2f", mediaEspera)
                         + "   |   Media Turnaround: " + String.format(java.util.Locale.US, "%.2f", mediaTurnaround)
                         + "   |   Procesos: " + registros.size()
         );
@@ -3003,6 +3048,7 @@ public class Interfaz extends javax.swing.JPanel {
         int rafaga;
         int tiempoInicio;
         int tiempoFinal;
+        int tiempoEspera;
         int turnaround;
         double trTs;
 
@@ -3014,6 +3060,7 @@ public class Interfaz extends javax.swing.JPanel {
                 int rafaga,
                 int tiempoInicio,
                 int tiempoFinal,
+                int tiempoEspera,
                 int turnaround,
                 double trTs
         ) {
@@ -3024,6 +3071,7 @@ public class Interfaz extends javax.swing.JPanel {
             this.rafaga = rafaga;
             this.tiempoInicio = tiempoInicio;
             this.tiempoFinal = tiempoFinal;
+            this.tiempoEspera = tiempoEspera;
             this.turnaround = turnaround;
             this.trTs = trTs;
         }
