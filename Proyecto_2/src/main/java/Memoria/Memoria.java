@@ -8,6 +8,7 @@ import CPU.BCP;
 import Memoria.Partition;
 import Memoria.BestFit;
 import Memoria.Pagination;
+import Settings.Constants;
 
 
 
@@ -18,10 +19,10 @@ import Memoria.Pagination;
 public class Memoria {
     private String[] memoria;
     private int tamaño;
-    private static final int inicio_SO = 0;
-    private static final int limite_SO = 149;
-    private static final int tamano_BCP = 30;
-    private static final int n_Procesos = 5;
+    private static final int inicio_SO = Constants.INICIO_SO;
+    private static final int limite_SO = Constants.LIMITE_SO;
+    private static final int tamano_BCP = Constants.TAMANO_BCP;
+    private static final int n_Procesos = Constants.MAX_PROCESOS;
 
     private int punteroSO;
     private int inicioUsuario;

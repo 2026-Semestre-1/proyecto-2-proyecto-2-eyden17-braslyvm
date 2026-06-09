@@ -17,6 +17,7 @@ import Algorithms.RR;
 import Algorithms.SRR;
 import Algorithms.HRRN;
 import Algorithms.Lottery;
+import Settings.Constants;
 
 /**
  *
@@ -43,93 +44,40 @@ public class Interfaz extends javax.swing.JPanel {
     private HRRN hrrnRuntime = new HRRN();
     private Lottery lotteryRuntime = null;
 
-    private static final int DEFAULT_MEMORIA = 512;
-    private static final int DEFAULT_VIRTUAL = 64;
-    private static final int DEFAULT_DISCO   = 512;
-    private static final int DEFAULT_CPU_COUNT = 4;
-    private static final String DEFAULT_SETTINGS_PATH = "src/main/java/Settings/Ajuste.json";
+    private static final int DEFAULT_MEMORIA = Constants.DEFAULT_MEMORIA;
+    private static final int DEFAULT_VIRTUAL = Constants.DEFAULT_VIRTUAL;
+    private static final int DEFAULT_DISCO = Constants.DEFAULT_DISCO;
+    private static final int DEFAULT_CPU_COUNT = Constants.DEFAULT_CPU_COUNT;
+    private static final String DEFAULT_SETTINGS_PATH = Constants.DEFAULT_SETTINGS_PATH;
 
     // Estrategia por defecto. Valores aceptados:
     // "Default", "Best_Fit", "Pagination", "Partition_Equal", "Partition_Different".
-    private static final String DEFAULT_STRATEGY = "Best_Fit";
+    private static final String DEFAULT_STRATEGY = Constants.DEFAULT_STRATEGY;
 
     // Para Pagination, este valor representa el tamaño de página.
-    private static final int DEFAULT_PAGE_SIZE = 4;
+    private static final int DEFAULT_PAGE_SIZE = Constants.DEFAULT_PAGE_SIZE;
 
     // Para Partition_Equal, este valor representa la cantidad de particiones.
-    private static final int DEFAULT_COUNT_PARTITIONS = 4;
+    private static final int DEFAULT_COUNT_PARTITIONS = Constants.DEFAULT_COUNT_PARTITIONS;
 
     // Para Partition_Different, este arreglo representa el patrón de particiones.
-    private static final int[] DEFAULT_PARTITION_SIZES = {20, 30, 50};
+    private static final int[] DEFAULT_PARTITION_SIZES = Constants.DEFAULT_PARTITION_SIZES;
     
-    private static final int TAMANO_BCP = 30;
-    private static final java.awt.Color COLOR_EJECUCION = new java.awt.Color(255, 249, 196);
-    private static final java.awt.Color COLOR_INSTRUCCION = new java.awt.Color(255, 236, 179);
-    private static final java.awt.Color COLOR_TEXTO_BASE = new java.awt.Color(44, 57, 75);
-    private static final java.awt.Color COLOR_TOAST = java.awt.Color.BLACK;
-    private static final String[] CAMPOS_BCP_KERNEL = {
-        "idProceso",
-        "nombreProceso",
-        "estado",
-        "base",
-        "limite",
-        "pc",
-        "ir",
-        "ac",
-        "ax",
-        "bx",
-        "cx",
-        "dx",
-        "al",
-        "ah",
-        "prioridad",
-        "tiempoInicio",
-        "tiempoEmpleado",
-        "pila",
-        "archivosAbiertos",
-        "tiempoLlegada",
-        "tiempoFinal",
-        "rafagaTotal",
-        "rafagaRestante",
-        "tiempoEspera",
-        "turnaround",
-        "trTs",
-        "tickets",
-        "quantumRestante",
-        "iniciado",
-        "siguienteBCP"
-    };
+    private static final int TAMANO_BCP = Constants.TAMANO_BCP;
+    private static final java.awt.Color COLOR_EJECUCION = Constants.COLOR_EJECUCION;
+    private static final java.awt.Color COLOR_INSTRUCCION = Constants.COLOR_INSTRUCCION;
+    private static final java.awt.Color COLOR_TEXTO_BASE = Constants.COLOR_TEXTO_BASE;
+    private static final java.awt.Color COLOR_TOAST = Constants.COLOR_TOAST;
+    private static final String[] CAMPOS_BCP_KERNEL = Constants.CAMPOS_BCP_KERNEL;
 
     // Colores para visualizar marcos, particiones y bloques.
     // Se usan colores un poco más fuertes para que se noten en la tabla.
-    private static final java.awt.Color[] COLORES_BLOQUES = {
-        new java.awt.Color(200, 230, 201),
-        new java.awt.Color(187, 222, 251),
-        new java.awt.Color(255, 224, 178),
-        new java.awt.Color(225, 190, 231),
-        new java.awt.Color(178, 235, 242),
-        new java.awt.Color(255, 205, 210),
-        new java.awt.Color(220, 237, 200),
-        new java.awt.Color(209, 196, 233)
-    };
+    private static final java.awt.Color[] COLORES_BLOQUES = Constants.COLORES_BLOQUES;
 
-    private static final java.awt.Color[] COLORES_BCP = {
-        new java.awt.Color(21, 101, 192),
-        new java.awt.Color(46, 125, 50),
-        new java.awt.Color(173, 20, 87),
-        new java.awt.Color(106, 27, 154),
-        new java.awt.Color(0, 121, 107),
-        new java.awt.Color(198, 40, 40),
-        new java.awt.Color(239, 108, 0),
-        new java.awt.Color(69, 90, 100),
-        new java.awt.Color(40, 53, 147),
-        new java.awt.Color(85, 139, 47),
-        new java.awt.Color(0, 96, 100),
-        new java.awt.Color(93, 64, 55)
-    };
+    private static final java.awt.Color[] COLORES_BCP = Constants.COLORES_BCP;
 
-    private static final java.awt.Color COLOR_HUECO_LIBRE = new java.awt.Color(224, 224, 224);
-    private static final int TIEMPO_ESPERA_MS = 750;
+    private static final java.awt.Color COLOR_HUECO_LIBRE = Constants.COLOR_HUECO_LIBRE;
+    private static final int TIEMPO_ESPERA_MS = Constants.TIEMPO_ESPERA_MS;
     private int tiempoGlobal = 0;
     private final java.util.Map<String, java.awt.Color> coloresPorBCP = new java.util.LinkedHashMap<>();
     private javax.swing.Popup toastPopup;
@@ -1338,7 +1286,12 @@ public class Interfaz extends javax.swing.JPanel {
         lblQuantum.setText("Quantum:");
         lblQuantum.setFont(new java.awt.Font("Segoe UI", java.awt.Font.BOLD, 13));
 
-        spnQuantum.setModel(new javax.swing.SpinnerNumberModel(2, 1, 100, 1));
+        spnQuantum.setModel(new javax.swing.SpinnerNumberModel(
+                Constants.DEFAULT_QUANTUM,
+                1,
+                Constants.MAX_QUANTUM,
+                1
+        ));
         spnQuantum.addChangeListener(e -> {
             resetPlanificadorEjecucion();
             prepararNuevaEjecucionDesdeArchivos("Quantum cambiado. Sistema reiniciado para nueva ejecución.");
@@ -1347,7 +1300,7 @@ public class Interfaz extends javax.swing.JPanel {
         lblCantidadCpus = new javax.swing.JLabel("CPUs:");
         lblCantidadCpus.setFont(new java.awt.Font("Segoe UI", java.awt.Font.BOLD, 13));
 
-        cmbCantidadCpus = new javax.swing.JComboBox<>(new String[]{"1", "2", "3", "4"});
+        cmbCantidadCpus = new javax.swing.JComboBox<>(Constants.CPU_OPTIONS);
         cmbCantidadCpus.setSelectedItem(String.valueOf(DEFAULT_CPU_COUNT));
         cmbCantidadCpus.setFont(new java.awt.Font("Segoe UI", java.awt.Font.PLAIN, 13));
         cmbCantidadCpus.setPreferredSize(new java.awt.Dimension(60, 28));
@@ -2272,7 +2225,9 @@ public class Interfaz extends javax.swing.JPanel {
         srtRuntime = new SRT();
         hrrnRuntime = new HRRN();
         rrRuntime = "RR".equals(algoritmo) ? new RR(quantum) : null;
-        srrRuntime = "SRR".equals(algoritmo) ? new SRR(quantum, 1, 3) : null;
+        srrRuntime = "SRR".equals(algoritmo)
+                ? new SRR(quantum, Constants.SRR_NEW_PRIORITY_RATE, Constants.SRR_ACCEPTED_PRIORITY_RATE)
+                : null;
         lotteryRuntime = "Lottery".equals(algoritmo) ? new Lottery(quantum) : null;
     }
 
@@ -2704,7 +2659,11 @@ public class Interfaz extends javax.swing.JPanel {
                 return new RR(quantum).schedule(procesos);
 
             case "SRR":
-                return new SRR(quantum, 1, 3).schedule(procesos);
+                return new SRR(
+                        quantum,
+                        Constants.SRR_NEW_PRIORITY_RATE,
+                        Constants.SRR_ACCEPTED_PRIORITY_RATE
+                ).schedule(procesos);
 
             case "HRRN":
                 return new HRRN().schedule(procesos);

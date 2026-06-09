@@ -4,6 +4,8 @@
  */
 package CPU;
 
+import Settings.Constants;
+
 /**
  * Representa el Bloque de Control de Proceso (BCP) de un programa cargado en memoria.
  * Esta clase almacena la información básica de cada proceso, como su identificador,
@@ -29,7 +31,7 @@ public class BCP {
     private int Ah;
     private int[] pila;
     private int puntero_pila;
-    private static final int size_pila = 5;
+    private static final int size_pila = Constants.STACK_SIZE;
     private int cpuAsignado;
     private int tiempoInicio;
     private int tiempoEmpleado;

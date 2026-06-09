@@ -1,6 +1,7 @@
 package Memoria;
 
 import CPU.BCP;
+import Settings.Constants;
 
 /**
  *
@@ -55,7 +56,7 @@ public class Pagination {
         this.pageSize = Math.max(1, pageSize);
         this.disco = disco;
         this.maxProcesses = maxProcesses;
-        this.maxPagesPerProcess = 200;
+        this.maxPagesPerProcess = Constants.MAX_PAGES_PER_PROCESS;
 
         int userMemorySize = memorySize - userStart;
         this.physicalFrameCount = userMemorySize / this.pageSize;
